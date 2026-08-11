@@ -26,17 +26,23 @@ export type Erc8004Metadata = {
   [key: string]: unknown
 }
 
-const BNB_CHAIN_ID = 56
-const DEFAULT_REGISTRY = '0x0000000000000000000000000000000000000000'
+// Mirrors bnb-chain/bnbagent-sdk network defaults (bnbagent/config.py).
+// Source: https://github.com/bnb-chain/bnbagent-sdk and the BNB Agent SDK network docs.
+const NETWORKS = {
+  'bsc-mainnet': { chainId: 56, registryAddress: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432', rpcUrl: 'https://bsc-dataseed.binance.org' },
+  'bsc-testnet': { chainId: 97, registryAddress: '0x8004A818BFB912233c491871b3d84c89A494BD9e', rpcUrl: 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' },
+} as const
 
 function env(name: string) { return process.env[name]?.trim() }
 
 export function getBnbConfig() {
-  return {
-    chainId: BNB_CHAIN_ID,
-    rpcUrl: env('BNB_RPC_URL') || 'https://bsc-dataseed.binance.org',
-    registryAddress: env('ERC8004_REGISTRY_ADDRESS') || DEFAULT_REGISTRY,
+  const network = env('NETWORK') === 'bsc-testnet' ? 'bsc-testnet' : 'bsc-mainnet'
+  const defaults = NETWORKS[network]
+  const registryAddress = env('ERC8004_REGISTRY_ADDRESS') || defaults.registryAddress
+  if (!/^0x[a-fA-F0-9]{40}$/.test(registryAddress) || /^0x0{40}$/i.test(registryAddress)) {
+    throw new Error(`Invalid ERC-8004 registry address for ${network}`)
   }
+  return { network, chainId: defaults.chainId, rpcUrl: env('RPC_URL') || env('BNB_RPC_URL') || defaults.rpcUrl, registryAddress }
 }
 
 async function rpc(method: string, params: unknown[]) {
@@ -66,6 +72,21 @@ export function parseMetadata(input: unknown): Erc8004Metadata {
     endpoint: typeof value.endpoint === 'string' ? value.endpoint : undefined,
     ownerAddress: typeof value.ownerAddress === 'string' ? value.ownerAddress : undefined,
   }
+}
+
+export async function discoverIdentities(): Promise<Erc8004Identity[]> {
+  const config = getBnbConfig()
+  const configured = env('ERC8004_REGISTRATIONS_JSON')
+  if (configured) {
+    const rows = JSON.parse(configured) as Array<Record<string, unknown>>
+    return rows.map((row) => ({ chainId: Number(row.chainId || config.chainId), registryAddress: String(row.registryAddress || config.registryAddress), tokenId: String(row.tokenId) })).filter((item) => item.tokenId && item.registryAddress.toLowerCase() === config.registryAddress.toLowerCase())
+  }
+  const indexerUrl = env('ERC8004_INDEXER_URL')
+  if (!indexerUrl) return []
+  const response = await fetch(indexerUrl, { signal: AbortSignal.timeout(12_000) })
+  if (!response.ok) throw new Error(`ERC-8004 indexer returned ${response.status}`)
+  const payload = await response.json() as { registrations?: Array<Record<string, unknown>> }
+  return (payload.registrations || []).map((row) => ({ chainId: Number(row.chainId || config.chainId), registryAddress: String(row.registryAddress || config.registryAddress), tokenId: String(row.tokenId) })).filter((item) => item.tokenId && item.registryAddress.toLowerCase() === config.registryAddress.toLowerCase())
 }
 
 export async function readRegistration(identity: Erc8004Identity): Promise<Erc8004Registration> {
@@ -98,5 +119,6 @@ export async function loadMetadata(uri: string): Promise<{ data: Erc8004Metadata
   const response = await fetch(uri, { signal: AbortSignal.timeout(12_000) })
   if (!response.ok) throw new Error(`Metadata returned ${response.status}`)
   const text = await response.text()
-  return { data: parseMetadata(JSON.parse(text)), hash: createHash('sha256').update(text).digest('hex') }
+  try { return { data: parseMetadata(JSON.parse(text)), hash: createHash('sha256').update(text).digest('hex') } }
+  catch { throw new Error('ERC-8004 agentURI metadata is not valid JSON') }
 }

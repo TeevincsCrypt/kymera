@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { getBnbConfig, loadMetadata, readRegistration, type Erc8004Identity } from './adapter'
+import { discoverIdentities, getBnbConfig, loadMetadata, readRegistration, type Erc8004Identity } from './adapter'
 
 export type SyncStats = { scanned: number; imported: number; updated: number; failed: number; errors: string[] }
 
@@ -32,10 +32,16 @@ export async function upsertRegistration(identity: Erc8004Identity) {
     : prisma.agent.create({ data })
 }
 
-export async function syncErc8004(ids: Erc8004Identity[] = []) : Promise<SyncStats> {
-  const stats: SyncStats = { scanned: ids.length, imported: 0, updated: 0, failed: 0, errors: [] }
-  for (const identity of ids) {
-    try { await upsertRegistration(identity); stats.imported += 1 }
+export async function syncErc8004(ids?: Erc8004Identity[]) : Promise<SyncStats> {
+  const identities = ids ?? await discoverIdentities()
+  const stats: SyncStats = { scanned: identities.length, imported: 0, updated: 0, failed: 0, errors: [] }
+  for (const identity of identities) {
+    try {
+      const existing = await prisma.agent.findFirst({ where: { erc8004ChainId: identity.chainId, erc8004RegistryAddress: identity.registryAddress, erc8004TokenId: identity.tokenId }, select: { id: true } })
+      await upsertRegistration(identity)
+      if (existing) stats.updated += 1
+      else stats.imported += 1
+    }
     catch (error) { stats.failed += 1; stats.errors.push(error instanceof Error ? error.message : 'Unknown sync error') }
   }
   return stats

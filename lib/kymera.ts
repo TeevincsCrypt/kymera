@@ -16,6 +16,7 @@ export type Agent = {
   tags: string[]
   creator: string
   updated: string
+  source?: 'ERC-8004 Registered'
 }
 
 export const agents: Agent[] = [
