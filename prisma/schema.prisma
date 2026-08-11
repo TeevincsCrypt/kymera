@@ -29,7 +29,15 @@ model Agent {
   transactions       AgentTransaction[]
   sessions           AgentSession[]
   benchmarkResults   BenchmarkResult[]
+  erc8004ChainId     Int?
+  erc8004RegistryAddress String?
+  erc8004TokenId     String?
+  erc8004MetadataUri String?
+  erc8004MetadataHash String?
+  erc8004LastSyncedAt DateTime?
+  erc8004RawRegistration Json?
 
+  @@unique([erc8004ChainId, erc8004RegistryAddress, erc8004TokenId])
   @@index([category])
   @@index([chain])
   @@index([status])
