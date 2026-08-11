@@ -1,10 +1,11 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { KymeraShell } from '@/components/kymera-shell'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'KYMERA — Discover better agents',
+  description: 'Discover, compare, and simulate autonomous agents with transparent performance signals.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -26,11 +27,8 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
-  ],
+  colorScheme: 'light',
+  themeColor: '#fafaf9',
 }
 
 export default function RootLayout({
@@ -39,9 +37,9 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="bg-[#fafaf9]">
       <body className="antialiased">
-        {children}
+        <KymeraShell>{children}</KymeraShell>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
