@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id                 String              @id @default(cuid())
+  name               String
+  description        String
+  category           String
+  chain              String
+  endpoint           String?
+  ownerAddress       String
+  registrationId     String?
+  capabilities       Json
+  supportedProtocols Json
+  price              Decimal?            @db.Decimal(18, 8)
+  verified           Boolean             @default(false)
+  status             String              @default("Live")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  performance        AgentPerformance?
+  tasks              AgentTask[]
+  capabilityItems    AgentCapability[]
+  transactions       AgentTransaction[]
+  sessions           AgentSession[]
+  benchmarkResults   BenchmarkResult[]
+
+  @@index([category])
+  @@index([chain])
+  @@index([status])
+  @@index([verified])
+  @@index([ownerAddress])
+}
+
+model AgentPerformance {
+  id                String   @id @default(cuid())
+  agentId           String   @unique
+  successRate       Float
+  tasksCompleted    Int      @default(0)
+  failedTasks       Int      @default(0)
+  avgExecutionTime  Float
+  totalVolume       Decimal  @default(0) @db.Decimal(18, 8)
+  kymeraScore       Float
+  lastEvaluatedAt   DateTime?
+  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([kymeraScore])
+}
+
+model AgentTask {
+  id             String   @id @default(cuid())
+  agentId        String
+  task           String
+  status         String
+  result         Json?
+  executionTime  Float?
+  cost           Decimal? @db.Decimal(18, 8)
+  createdAt      DateTime @default(now())
+  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, status])
+}
+
+model AgentCapability {
+  id          String @id @default(cuid())
+  agentId     String
+  name        String
+  description String?
+  agent       Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
+
+model AgentTransaction {
+  id        String   @id @default(cuid())
+  agentId   String
+  txHash    String   @unique
+  chain     String
+  action    String
+  amount    Decimal? @db.Decimal(18, 8)
+  status    String
+  timestamp DateTime @default(now())
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, timestamp])
+}
+
+model AgentSession {
+  id            String             @id @default(cuid())
+  agentId       String
+  userAddress   String
+  spendingLimit Decimal?           @db.Decimal(18, 8)
+  expiresAt     DateTime
+  status        String
+  createdAt     DateTime           @default(now())
+  revokedAt     DateTime?
+  agent         Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  permissions   AgentPermission[]
+
+  @@index([agentId, status])
+  @@index([userAddress])
+}
+
+model AgentPermission {
+  id         String       @id @default(cuid())
+  sessionId  String
+  permission String
+  allowed    Boolean      @default(false)
+  session    AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model Benchmark {
+  id          String            @id @default(cuid())
+  task        String
+  status      String
+  createdAt   DateTime          @default(now())
+  completedAt DateTime?
+  results     BenchmarkResult[]
+
+  @@index([status])
+}
+
+model BenchmarkResult {
+  id            String    @id @default(cuid())
+  benchmarkId   String
+  agentId       String
+  accuracy      Float?
+  executionTime Float?
+  cost          Decimal?  @db.Decimal(18, 8)
+  riskScore     Float?
+  result        Json?
+  rank          Int?
+  benchmark     Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+  agent         Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([benchmarkId, agentId])
+  @@index([agentId])
+}
