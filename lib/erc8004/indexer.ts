@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { discoverIdentities, getBnbConfig, loadMetadata, readRegistration, type Erc8004Identity } from './adapter'
+import { checkBnbRuntime, discoverIdentities, getBnbConfig, loadMetadata, readRegistration, type Erc8004Identity } from './adapter'
 
 export type SyncStats = { scanned: number; imported: number; updated: number; failed: number; errors: string[] }
 
@@ -45,6 +45,12 @@ export async function syncErc8004(ids?: Erc8004Identity[]) : Promise<SyncStats> 
     catch (error) { stats.failed += 1; stats.errors.push(error instanceof Error ? error.message : 'Unknown sync error') }
   }
   return stats
+}
+
+export async function getIndexerStatus() {
+  const config = getIndexerConfig()
+  const runtime = await checkBnbRuntime()
+  return { ...config, rpcChainId: runtime.chainId, blockNumber: runtime.blockNumber, registryStatus: runtime.registryStatus }
 }
 
 export function getIndexerConfig() {

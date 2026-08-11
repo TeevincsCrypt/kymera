@@ -45,6 +45,14 @@ export function getBnbConfig() {
   return { network, chainId: defaults.chainId, rpcUrl: env('RPC_URL') || env('BNB_RPC_URL') || defaults.rpcUrl, registryAddress }
 }
 
+export async function checkBnbRuntime() {
+  const config = getBnbConfig()
+  const chainHex = await rpc('eth_chainId', [])
+  const blockHex = await rpc('eth_blockNumber', [])
+  const registryCode = await rpc('eth_getCode', [config.registryAddress, 'latest'])
+  return { chainId: Number.parseInt(String(chainHex), 16), blockNumber: Number.parseInt(String(blockHex), 16), registryStatus: registryCode && registryCode !== '0x' ? 'reachable' as const : 'no-code' as const }
+}
+
 async function rpc(method: string, params: unknown[]) {
   const response = await fetch(getBnbConfig().rpcUrl, {
     method: 'POST',
