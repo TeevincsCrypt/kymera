@@ -1,0 +1,12 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getIndexerConfig, syncErc8004 } from '@/lib/erc8004/indexer'
+import type { Erc8004Identity } from '@/lib/erc8004/adapter'
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({})) as { identities?: Erc8004Identity[] }
+    const identities = Array.isArray(body.identities) ? body.identities.slice(0, 100) : []
+    const stats = await syncErc8004(identities)
+    return NextResponse.json({ ...stats, config: getIndexerConfig() })
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Sync failed' }, { status: 500 }) }
+}
