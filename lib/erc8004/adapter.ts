@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto'
+import { enumerateAllAgents } from './enumerator'
 
 export type Erc8004Identity = {
   chainId: number
   registryAddress: string
   tokenId: string
+  scanRecord?: Record<string, unknown>
 }
 
 export type Erc8004Registration = Erc8004Identity & {
@@ -83,23 +85,12 @@ export function parseMetadata(input: unknown): Erc8004Metadata {
 }
 
 export async function discoverIdentities(): Promise<Erc8004Identity[]> {
-  const config = getBnbConfig()
-  const configured = env('ERC8004_REGISTRATIONS_JSON')
-  if (configured) {
-    const rows = JSON.parse(configured) as Array<Record<string, unknown>>
-    return rows.map((row) => ({ chainId: Number(row.chainId || config.chainId), registryAddress: String(row.registryAddress || config.registryAddress), tokenId: String(row.tokenId) })).filter((item) => item.tokenId && item.registryAddress.toLowerCase() === config.registryAddress.toLowerCase())
-  }
-  const indexerUrl = env('ERC8004_INDEXER_URL')
-  if (!indexerUrl) return []
-  const response = await fetch(indexerUrl, { signal: AbortSignal.timeout(12_000) })
-  if (!response.ok) throw new Error(`ERC-8004 indexer returned ${response.status}`)
-  const payload = await response.json() as { registrations?: Array<Record<string, unknown>> }
-  return (payload.registrations || []).map((row) => ({ chainId: Number(row.chainId || config.chainId), registryAddress: String(row.registryAddress || config.registryAddress), tokenId: String(row.tokenId) })).filter((item) => item.tokenId && item.registryAddress.toLowerCase() === config.registryAddress.toLowerCase())
+  const result = await enumerateAllAgents()
+  return result.identities.filter((item) => item.registryAddress.toLowerCase() === getBnbConfig().registryAddress.toLowerCase())
 }
 
 export async function readRegistration(identity: Erc8004Identity): Promise<Erc8004Registration> {
-  // Registry ABI/event indexing is deliberately isolated here. Configure an indexer URL
-  // for production, or provide ERC8004_REGISTRATIONS_JSON for deterministic imports.
+  if (identity.scanRecord) return normalizeRegistration(identity, identity.scanRecord)
   const configured = env('ERC8004_REGISTRATIONS_JSON')
   if (configured) {
     const rows = JSON.parse(configured) as Array<Record<string, unknown>>
@@ -111,12 +102,19 @@ export async function readRegistration(identity: Erc8004Identity): Promise<Erc80
 }
 
 function normalizeRegistration(identity: Erc8004Identity, row: Record<string, unknown>): Erc8004Registration {
-  const metadata = parseMetadata(row.metadata)
+  const metadata = parseMetadata({
+    ...(row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}),
+    name: row.name,
+    description: row.description,
+    image: row.image_url,
+    supportedProtocols: row.supported_protocols,
+    ownerAddress: row.owner_address,
+  })
   return {
     ...identity,
-    metadataUri: String(row.metadataUri || metadata.metadataUri || ''),
+    metadataUri: String(row.metadataUri || row.agentURI || row.agent_uri || row.uri || metadata.metadataUri || ''),
     metadataHash: typeof row.metadataHash === 'string' ? row.metadataHash : undefined,
-    ownerAddress: String(row.ownerAddress || metadata.ownerAddress || ''),
+    ownerAddress: String(row.ownerAddress || row.owner_address || row.owner || metadata.ownerAddress || ''),
     status: row.status === 'Paused' || row.status === 'Beta' ? row.status : 'Live',
     raw: row,
   }
@@ -124,7 +122,10 @@ function normalizeRegistration(identity: Erc8004Identity, row: Record<string, un
 
 export async function loadMetadata(uri: string): Promise<{ data: Erc8004Metadata; hash: string }> {
   if (!uri) return { data: {}, hash: createHash('sha256').update('{}').digest('hex') }
-  const response = await fetch(uri, { signal: AbortSignal.timeout(12_000) })
+  const parsed = new URL(uri)
+  if (!['https:', 'ipfs:'].includes(parsed.protocol)) throw new Error('Unsupported ERC-8004 metadata URI protocol')
+  if (parsed.protocol === 'ipfs:') throw new Error('IPFS metadata requires an HTTP gateway configuration')
+  const response = await fetch(parsed, { signal: AbortSignal.timeout(12_000) })
   if (!response.ok) throw new Error(`Metadata returned ${response.status}`)
   const text = await response.text()
   try { return { data: parseMetadata(JSON.parse(text)), hash: createHash('sha256').update(text).digest('hex') } }

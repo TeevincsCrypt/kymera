@@ -54,5 +54,5 @@ export async function getIndexerStatus() {
 }
 
 export function getIndexerConfig() {
-  return { ...getBnbConfig(), configured: Boolean(process.env.ERC8004_REGISTRATIONS_JSON || process.env.ERC8004_INDEXER_URL) }
+  return { ...getBnbConfig(), configured: true, source: '8004scan' as const, scanApiUrl: process.env.ERC8004_SCAN_API_URL || 'https://www.8004scan.io/api/v1' }
 }
