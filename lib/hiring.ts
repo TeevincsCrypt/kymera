@@ -23,7 +23,8 @@ export async function verifyHirePayment(hireId: string, userAddress: string) {
   const result = await getPaymentProvider().verifyPayment(hire.paymentId)
   if (!result.verified) return prisma.agentHire.update({ where: { id: hire.id }, data: { paymentStatus: result.status, status: 'PAYMENT_FAILED' }, include: { agent: true } })
   const session = hire.sessionId ? null : await createGuardSession({ agentId: hire.agentId, userAddress, durationHours: 24, spendingLimit: Number(hire.amount), permissions: Array.isArray(hire.requestedPermissions) ? hire.requestedPermissions as string[] : [] })
-  return prisma.agentHire.update({ where: { id: hire.id }, data: { paymentStatus: 'VERIFIED', status: 'ACTIVE', paymentId: hire.paymentId, paidAt: new Date(), activatedAt: new Date(), sessionId: session?.id ?? hire.sessionId }, include: { agent: true } })
+  const activated = await prisma.agentHire.update({ where: { id: hire.id }, data: { paymentStatus: 'VERIFIED', status: 'ACTIVE', paymentId: hire.paymentId, paidAt: new Date(), activatedAt: new Date(), sessionId: session?.id ?? hire.sessionId }, include: { agent: true } })
+  return activated
 }
 
 export async function listHires(userAddress: string) {

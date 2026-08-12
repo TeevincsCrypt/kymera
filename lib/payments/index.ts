@@ -25,5 +25,7 @@ export class MockPaymentProvider implements PaymentProvider {
 }
 
 export function getPaymentProvider(): PaymentProvider {
+  // x402 is intentionally unavailable until a verified provider is configured.
+  // The mock provider is explicitly labeled demo-only and never represents a real charge.
   return new MockPaymentProvider()
 }
