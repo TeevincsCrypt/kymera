@@ -107,8 +107,10 @@ model AgentSession {
   status        String
   createdAt     DateTime           @default(now())
   revokedAt     DateTime?
+  mode          String             @default("SIMULATION")
   agent         Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
   permissions   AgentPermission[]
+  auditLogs     AgentAuditLog[]
 
   @@index([agentId, status])
   @@index([userAddress])
@@ -122,6 +124,18 @@ model AgentPermission {
   session    AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+model AgentAuditLog {
+  id           String       @id @default(cuid())
+  sessionId    String
+  action       String
+  actorAddress String?
+  details      Json?
+  createdAt    DateTime     @default(now())
+  session      AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
 }
 
 model Benchmark {
