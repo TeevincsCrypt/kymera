@@ -143,6 +143,13 @@ model BenchmarkResult {
   executionTime Float?
   cost          Decimal?  @db.Decimal(18, 8)
   riskScore     Float?
+  score         Float?
+  capabilityMatch Float?
+  taskRelevance Float?
+  protocolMatch Float?
+  metadataQuality Float?
+  evaluationConfidence Float?
+  reasoning     Json?
   result        Json?
   rank          Int?
   benchmark     Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)

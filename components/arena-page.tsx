@@ -1,0 +1,30 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import type { Agent } from '@/lib/kymera'
+
+type Result = { benchmarkId: string; task: string; taskLabel: string; winner: { name: string; score: number; reasons: string[] }; rankings: Array<{ agentId: string; name: string; rank: number; score: number; evaluated: boolean; reasons: string[]; capabilityMatch: number; taskRelevance: number; protocolMatch: number; metadataQuality: number; evaluationConfidence: number }>; share: { title: string; text: string } }
+
+export function ArenaPage({ agents }: { agents: Agent[] }) {
+  const [task, setTask] = useState('Compare these agents for low-risk yield monitoring on BNB Chain')
+  const [selected, setSelected] = useState<string[]>(agents.slice(0, 3).map((agent) => agent.id))
+  const [result, setResult] = useState<Result | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const available = useMemo(() => agents.slice(0, 20), [agents])
+
+  async function run() {
+    setError(''); setLoading(true)
+    try {
+      const response = await fetch('/api/arena', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ task, agentIds: selected }) })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Arena benchmark failed')
+      setResult(payload)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Arena benchmark failed') } finally { setLoading(false) }
+  }
+
+  return <main className="min-h-screen bg-[#fafaf9] px-6 py-10 text-[#272522] lg:px-10"><div className="mx-auto max-w-6xl"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c45427]">The Arena</p><h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight lg:text-6xl">Put agents head-to-head.</h1><p className="mt-4 max-w-2xl text-base leading-7 text-[#77736c]">Compare selected indexed agents against one task. Rankings are recommendations based on metadata and available Kymera evaluation data—not fabricated execution results.</p>
+    <section className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"><div className="rounded-2xl border border-[#ded9d1] bg-white p-6"><label htmlFor="arena-task" className="text-sm font-semibold">Benchmark task</label><textarea id="arena-task" value={task} onChange={(event) => setTask(event.target.value)} className="mt-3 min-h-32 w-full resize-y rounded-xl border border-[#ded9d1] bg-[#fafaf9] p-4 text-sm outline-none focus:border-[#c45427]" /><div className="mt-6 flex items-center justify-between"><span className="text-sm font-semibold">Select agents <span className="font-normal text-[#858078]">({selected.length}/5)</span></span><button onClick={run} disabled={loading || selected.length < 2} className="rounded-full bg-[#c45427] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{loading ? 'Running benchmark…' : 'Run Arena'}</button></div>{error && <p className="mt-4 rounded-lg bg-[#fff1eb] p-3 text-sm text-[#b84b1f]">{error}</p>}</div><div className="rounded-2xl border border-[#ded9d1] bg-white p-6"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#858078]">Available indexed agents</p><div className="mt-4 flex max-h-72 flex-col gap-3 overflow-y-auto">{available.map((agent) => <label key={agent.id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-[#eeeae4] p-3"><input type="checkbox" checked={selected.includes(agent.id)} disabled={!selected.includes(agent.id) && selected.length >= 5} onChange={() => setSelected((current) => current.includes(agent.id) ? current.filter((id) => id !== agent.id) : [...current, agent.id])} className="accent-[#c45427]" /><span className="min-w-0"><span className="block truncate text-sm font-medium">{agent.name}</span><span className="block text-xs text-[#858078]">{agent.chain} · {agent.category}</span></span></label>)}</div></div></section>
+    {result && <section className="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl border border-[#f0c3ad] bg-[#fff6f1] p-6"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b84b1f]">Winner · {result.taskLabel}</p><h2 className="mt-4 text-3xl font-semibold">{result.winner.name}</h2><p className="mt-2 text-5xl font-semibold text-[#c45427]">{result.winner.score}<span className="text-lg text-[#858078]">/100</span></p><p className="mt-4 text-sm leading-6 text-[#77736c]">Transparent recommendation score. It does not represent a guaranteed execution outcome.</p><div className="mt-5 flex flex-col gap-2">{result.winner.reasons.map((reason) => <p key={reason} className="text-sm">• {reason}</p>)}</div><button onClick={() => navigator.clipboard?.writeText(result.share.text)} className="mt-6 rounded-full border border-[#d9a48b] px-4 py-2 text-sm font-semibold text-[#b84b1f]">Copy share card</button></div><div className="overflow-hidden rounded-2xl border border-[#ded9d1] bg-white"><div className="border-b border-[#eeeae4] px-6 py-4"><p className="text-sm font-semibold">Side-by-side comparison</p></div><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-[#fafaf9] text-xs uppercase tracking-wide text-[#858078]"><tr><th className="px-6 py-3">Rank</th><th className="px-6 py-3">Agent</th><th className="px-6 py-3">Score</th><th className="px-6 py-3">Capabilities</th><th className="px-6 py-3">Task relevance</th><th className="px-6 py-3">Evaluation</th></tr></thead><tbody>{result.rankings.map((row) => <tr key={row.agentId} className="border-t border-[#eeeae4]"><td className="px-6 py-4 font-semibold">#{row.rank}</td><td className="px-6 py-4 font-medium">{row.name}</td><td className="px-6 py-4 text-[#c45427]">{row.score}/100</td><td className="px-6 py-4">{row.capabilityMatch}%</td><td className="px-6 py-4">{row.taskRelevance}%</td><td className="px-6 py-4">{row.evaluated ? `${row.evaluationConfidence}% confidence` : 'Not yet evaluated'}</td></tr>)}</tbody></table></div></div></section>}
+  </div></main>
+}
