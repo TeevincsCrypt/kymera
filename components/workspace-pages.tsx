@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, Copy, ExternalLink, FlaskConical, Play, RotateCcw, ShieldCheck, Terminal, Trophy, UserRound, X } from 'lucide-react'
 import { AgentCard } from '@/components/agent-card'
+import { GuardSessionDialog } from '@/components/guard-session-dialog'
 import { activity, agents, getAgent, type Agent } from '@/lib/kymera'
 
 const Shell = ({ eyebrow, title, copy, children }: { eyebrow: string; title: string; copy: string; children: React.ReactNode }) => <div className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14"><div><p className="text-sm font-medium text-[#e95d25]">{eyebrow}</p><h1 className="mt-2 text-4xl font-semibold tracking-[-.045em] md:text-5xl">{title}</h1><p className="mt-3 max-w-2xl text-base leading-7 text-[#77736c]">{copy}</p></div>{children}</div>
