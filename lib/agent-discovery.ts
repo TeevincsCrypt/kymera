@@ -30,9 +30,11 @@ function rankCandidates(candidates: Awaited<ReturnType<typeof prisma.agent.findM
     const hits = intent.terms.filter((term) => text.includes(term))
     const capabilityHits = intent.capabilities.filter((term) => text.includes(term))
     const protocolHits = intent.protocols.filter((term) => text.includes(term.toLowerCase()))
+    const pancakeEvidence = intent.capabilities.includes('pancakeswap') && ['pancakeswap', 'pancake swap', 'liquidity', 'amm', 'pool'].some((term) => text.includes(term))
     const performance = scoreAgent(agent)
-    const matchScore = Math.min(100, hits.length * 12 + capabilityHits.length * 10 + protocolHits.length * 10 + (intent.category && agent.category === intent.category ? 25 : 0) + (intent.chain && text.includes(intent.chain.toLowerCase()) ? 15 : 0) + (performance.score ?? 0) * 0.25)
+    const matchScore = Math.min(100, hits.length * 12 + capabilityHits.length * 10 + protocolHits.length * 10 + (pancakeEvidence ? 24 : 0) + (intent.category && agent.category === intent.category ? 25 : 0) + (intent.chain && text.includes(intent.chain.toLowerCase()) ? 15 : 0) + (performance.score ?? 0) * 0.25)
     const reasons = [...capabilityHits.slice(0, 2).map((hit) => `Matches ${hit}`), ...protocolHits.map((hit) => `Supports ${hit}`)]
+    if (pancakeEvidence) reasons.push('PancakeSwap evidence in indexed metadata')
     if (intent.category && agent.category === intent.category) reasons.push(`${intent.category} specialist`)
     if (!reasons.length && intent.mode === 'browse') reasons.push('Available in the Kymera marketplace')
     return { agent, score: performance.score, matchScore: Math.round(matchScore), reasons, evaluation: performance.label }

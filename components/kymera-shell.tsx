@@ -10,6 +10,7 @@ const nav = [
   { href: '/discover', label: 'Discover agents', icon: Compass },
   { href: '/arena', label: 'Benchmark arena', icon: Trophy },
   { href: '/simulate', label: 'Simulate', icon: Sparkles },
+  { href: '/pancakeswap', label: 'PancakeSwap', icon: Activity },
   { href: '/dashboard', label: 'My workspace', icon: Boxes },
 ]
 

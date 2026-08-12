@@ -11,13 +11,14 @@ export type DiscoveryIntent = {
 }
 
 const categories = ['Trading', 'Research', 'Operations', 'Creative']
-const protocols = ['ERC-8004', 'A2A', 'MCP', 'x402']
+const protocols = ['ERC-8004', 'A2A', 'MCP', 'x402', 'PancakeSwap', 'PancakeSwap V3']
 const capabilityMap: Record<string, string[]> = {
   yield: ['yield', 'risk', 'trading'],
   research: ['research', 'market', 'sources', 'signals', 'data'],
   support: ['support', 'triage', 'crm', 'customer'],
   copy: ['copy', 'creative', 'brand', 'editorial'],
   operations: ['routing', 'automation', 'sla', 'operations'],
+  pancakeswap: ['pancakeswap', 'pancake swap', 'liquidity', 'pool', 'swap', 'amm'],
 }
 
 export function interpretQuery(input: string): DiscoveryIntent {
