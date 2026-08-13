@@ -18,7 +18,7 @@ type Source = { name: SourceName; url: string }
 type SourceState = { status: 'healthy' | 'unavailable' | 'not_configured'; lastSuccessfulSource: SourceName | null; lastSuccessfulFetch: string | null }
 
 const PRIMARY_URL = process.env.PANCAKESWAP_SUBGRAPH_URL?.trim() || ''
-const FALLBACK_URL = process.env.PANCAKESWAP_SUBGRAPH_FALLBACK_URL?.trim() || 'https://gateway.thegraph.com/api/subgraphs/id/A1BC1hzDsK4NTeXBpKQnDBphngpYZAwDUF7dEBfa3jHK'
+const FALLBACK_URL = process.env.PANCAKESWAP_SUBGRAPH_FALLBACK_URL?.trim() || 'https://gateway.thegraph.com/api/subgraphs/id/78EUqzJmEVJsAKvWghn7qotf9LVGqcTQxJhT5z84ZmgJ'
 const CHAIN = process.env.PANCAKESWAP_CHAIN?.trim() || 'bsc'
 let state: SourceState = { status: 'not_configured', lastSuccessfulSource: null, lastSuccessfulFetch: null }
 
@@ -26,6 +26,7 @@ function sources(): Source[] {
   return [
     ...(PRIMARY_URL ? [{ name: 'PancakeSwap V3 BNB' as const, url: PRIMARY_URL }] : []),
     ...(FALLBACK_URL ? [{ name: 'PancakeSwap V3 BSC' as const, url: FALLBACK_URL }] : []),
+    ...(FALLBACK_URL !== 'https://gateway.thegraph.com/api/subgraphs/id/78EUqzJmEVJsAKvWghn7qotf9LVGqcTQxJhT5z84ZmgJ' ? [{ name: 'PancakeSwap V3 BSC' as const, url: 'https://gateway.thegraph.com/api/subgraphs/id/78EUqzJmEVJsAKvWghn7qotf9LVGqcTQxJhT5z84ZmgJ' }] : []),
   ]
 }
 
@@ -44,11 +45,11 @@ async function queryAt<T>(source: Source, query: string, variables?: Record<stri
   return payload.data
 }
 
-const HEALTH_QUERY = `{ factories(first: 5) { id poolCount txCount totalVolumeUSD } }`
+const HEALTH_QUERY = `{ pools(first: 1) { id } }`
 
 async function healthySource(source: Source) {
-  const data = await queryAt<{ factories?: Array<Record<string, unknown>> }>(source, HEALTH_QUERY)
-  if (!Array.isArray(data.factories)) throw new Error(`${source.name} health response was incompatible`)
+  const data = await queryAt<{ pools?: Array<Record<string, unknown>> }>(source, HEALTH_QUERY)
+  if (!Array.isArray(data.pools)) throw new Error(`${source.name} health response was incompatible`)
   return data
 }
 
