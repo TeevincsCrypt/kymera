@@ -134,6 +134,12 @@ model AgentSession {
   createdAt     DateTime           @default(now())
   revokedAt     DateTime?
   mode          String             @default("SIMULATION")
+  provider      String             @default("KYмERA_GUARD")
+  walletAddress String?
+  providerSessionId String?
+  network       String?
+  verificationUrl String?
+  grantTxHash   String?
   agent         Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
   permissions   AgentPermission[]
   auditLogs     AgentAuditLog[]

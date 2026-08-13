@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
+import { getAltanaStatus, grantAltanaSession } from '@/lib/altana/provider'
 
 export const GUARD_PERMISSIONS = ['read_market_data', 'analyze_positions', 'execute_trades', 'move_funds', 'submit_transactions'] as const
 export type GuardPermission = (typeof GUARD_PERMISSIONS)[number]
@@ -27,8 +28,11 @@ export function validateGuardInput(input: CreateGuardInput) {
 export async function createGuardSession(input: CreateGuardInput) {
   const valid = validateGuardInput(input)
   const expiresAt = new Date(Date.now() + valid.durationHours * 60 * 60 * 1000)
-  const session = await prisma.agentSession.create({ data: { id: randomUUID(), agentId: valid.agentId, userAddress: valid.userAddress, spendingLimit: valid.spendingLimit, expiresAt, status: 'Active', mode: 'SIMULATION', permissions: { create: valid.permissions.map((permission) => ({ permission, allowed: true })) } } })
-  await prisma.agentAuditLog.create({ data: { id: randomUUID(), sessionId: session.id, action: 'SESSION_CREATED', actorAddress: valid.userAddress, details: { permissions: valid.permissions, durationHours: valid.durationHours, spendingLimit: valid.spendingLimit, mode: 'SIMULATION' } } })
+  const altana = getAltanaStatus()
+  let grant: Awaited<ReturnType<typeof grantAltanaSession>> | null = null
+  if (altana.configured) grant = await grantAltanaSession({ expiry: expiresAt, spendLimit: valid.spendingLimit, permissions: valid.permissions })
+  const session = await prisma.agentSession.create({ data: { id: randomUUID(), agentId: valid.agentId, userAddress: valid.userAddress, spendingLimit: valid.spendingLimit, expiresAt, status: 'Active', mode: grant ? 'ALTANA_ONCHAIN' : 'SIMULATION', provider: grant ? 'ALTANA' : 'KYМERA_GUARD', walletAddress: grant?.walletAddress, providerSessionId: grant?.providerSessionId, network: grant?.network, verificationUrl: grant?.verificationUrl, grantTxHash: grant?.transactionHash, permissions: { create: valid.permissions.map((permission) => ({ permission, allowed: true })) } } })
+  await prisma.agentAuditLog.create({ data: { id: randomUUID(), sessionId: session.id, action: 'SESSION_CREATED', actorAddress: valid.userAddress, details: { permissions: valid.permissions, durationHours: valid.durationHours, spendingLimit: valid.spendingLimit, mode: grant ? 'ALTANA_ONCHAIN' : 'SIMULATION', provider: grant ? 'ALTANA' : 'KYМERA_GUARD' } } })
   return session
 }
 
