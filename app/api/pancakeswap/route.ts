@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
-import { getPancakeStatus, listPancakePools } from '@/lib/pancakeswap'
+import { getPancakeProvider } from '@/lib/pancakeswap/provider'
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
     const search = url.searchParams.get('search') || ''
     const limit = Number(url.searchParams.get('limit') || 12)
-    return NextResponse.json({ status: await getPancakeStatus(), pools: await listPancakePools(search, limit) })
+    const provider = getPancakeProvider()
+    const health = await provider.health()
+    const opportunities = await provider.getPools(search, limit)
+    return NextResponse.json({ status: health.status, source: health.source, opportunities, updatedAt: health.checkedAt })
   } catch (error) {
-    return NextResponse.json({ status: await getPancakeStatus(), pools: [], error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
+    const health = await getPancakeProvider().health()
+    return NextResponse.json({ status: health.status, source: health.source, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
   }
 }

@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
-import { getPancakeOpportunities, getPancakeStatus } from '@/lib/pancakeswap'
+import { getPancakeProvider } from '@/lib/pancakeswap/provider'
 
 export async function POST(request: Request) {
   try {
     const body = await request.json() as { task?: string }
     const task = String(body.task || '').trim()
     if (!task) return NextResponse.json({ error: 'Task is required' }, { status: 400 })
-    return NextResponse.json({ status: await getPancakeStatus(), task, opportunities: await getPancakeOpportunities(task) })
+    const provider = getPancakeProvider()
+    const health = await provider.health()
+    return NextResponse.json({ status: health.status, source: health.source, task, opportunities: await provider.getOpportunities(task), updatedAt: health.checkedAt })
   } catch (error) {
-    return NextResponse.json({ status: await getPancakeStatus(), opportunities: [], error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
+    const health = await getPancakeProvider().health()
+    return NextResponse.json({ status: health.status, source: health.source, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
   }
 }
