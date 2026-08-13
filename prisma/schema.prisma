@@ -158,6 +158,51 @@ model AgentPermission {
   @@index([sessionId])
 }
 
+model AltanaWallet {
+  id          String   @id @default(cuid())
+  address     String   @unique
+  network     String
+  mode        String
+  createdAt   DateTime @default(now())
+  sessions    AltanaSession[]
+  executions  AltanaExecution[]
+}
+
+model AltanaSession {
+  id                String   @id @default(cuid())
+  walletId          String
+  agentId           String
+  allowedContracts  Json
+  allowedMethods    Json
+  spendingCap       Decimal? @db.Decimal(18, 8)
+  expiry            DateTime
+  status            String
+  simulated         Boolean  @default(true)
+  revokedAt         DateTime?
+  createdAt         DateTime @default(now())
+  wallet            AltanaWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  executions        AltanaExecution[]
+  @@index([agentId, status])
+}
+
+model AltanaExecution {
+  id              String   @id @default(cuid())
+  agentId         String
+  walletId        String
+  sessionId       String
+  action          String
+  target          String
+  value           Decimal? @db.Decimal(18, 8)
+  status          String
+  simulated       Boolean  @default(true)
+  txHash          String?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  wallet          AltanaWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  session         AltanaSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([agentId, createdAt])
+}
+
 model AgentAuditLog {
   id           String       @id @default(cuid())
   sessionId    String

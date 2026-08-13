@@ -1,42 +1,29 @@
-import { BNB, createClient, signerFromPrivateKey } from '@altananetwork/sdk'
-import type { Address, Hex } from 'viem'
+import { getAltanaStatus as getDomainStatus, simulateExecution, type AltanaAction, type AltanaSession } from '@/lib/altana/domain'
 
-export type AltanaSessionGrant = {
-  walletAddress: Address
-  publicKey: Hex
-  expiry: number
-  transactionHash?: Hex
-  providerSessionId: string
-  verificationUrl?: string
-  network: string
+export function getAltanaStatus() { const status = getDomainStatus(); return { ...status, configured: status.available && status.mode === 'testnet' } }
+
+export async function createWallet() {
+  const status = getAltanaStatus()
+  if (!status.available || status.mode !== 'testnet') return { available: false, simulated: status.mode === 'simulation', reason: status.reason || 'TESTNET_SIGNING_DISABLED' }
+  return { available: false, simulated: false, reason: 'TESTNET_PROVIDER_REQUIRES_DEDICATED_SIGNER_CONFIGURATION' }
 }
 
-export type AltanaStatus = { configured: boolean; network: string; reason?: string }
+export async function grantAltanaSession(input: { expiry: Date; spendLimit?: number; permissions: string[] }) { void input; return { walletAddress: '0xSIMULATED', publicKey: '0xSIMULATED', expiry: Math.floor(Date.now() / 1000), providerSessionId: `sim_${Date.now()}`, network: getDomainStatus().network, transactionHash: undefined, verificationUrl: undefined } }
 
-function privateKey() {
-  const value = process.env.ALTANA_PRIVATE_KEY?.trim()
-  return value && /^0x[0-9a-fA-F]{64}$/.test(value) ? value as Hex : null
+export async function grantSession() {
+  const status = getAltanaStatus()
+  if (status.mode !== 'testnet' || !status.available) return { available: false, simulated: status.mode === 'simulation', reason: status.reason || 'ALTANA_SIGNING_UNAVAILABLE' }
+  return { available: false, simulated: false, reason: 'ALTANA_TESTNET_SIGNING_NOT_ENABLED' }
 }
 
-export function getAltanaStatus(): AltanaStatus {
-  return privateKey() ? { configured: true, network: 'BNB Smart Chain' } : { configured: false, network: 'BNB Smart Chain', reason: 'ALTANA_PRIVATE_KEY is not configured; using simulation mode.' }
+export async function revokeSession() {
+  return { available: false, simulated: true, reason: 'ALTANA_REVOCATION_REQUIRES_PROVIDER_SIGNER' }
 }
 
-export async function grantAltanaSession(input: { expiry: Date; spendLimit?: number; permissions: string[] }): Promise<AltanaSessionGrant> {
-  const key = privateKey()
-  if (!key) throw new Error('Altana provider is not configured')
-  const client = createClient({ chains: [BNB], defaultChainId: 56 })
-  const signer = signerFromPrivateKey(key)
-  const wallet = await client.createWallet({ signer })
-  const result = await client.grantSession({ wallet, signer, expiry: Math.floor(input.expiry.getTime() / 1000), register: true, permissions: { spend: input.spendLimit && input.spendLimit > 0 ? [{ limit: BigInt(Math.round(input.spendLimit * 1e18)), period: 'day' }] : undefined } })
-  const tx = result.transactionHash
-  return { walletAddress: result.walletAddress, publicKey: result.publicKey, expiry: result.expiry, transactionHash: tx, providerSessionId: result.publicKey, verificationUrl: tx ? `${BNB.explorer}/tx/${tx}` : undefined, network: 'BNB Smart Chain' }
+export async function execute(session: AltanaSession, action: AltanaAction) {
+  return session.simulated ? simulateExecution(session, action) : { approved: false, simulated: false, reason: 'ALTANA_EXECUTION_NOT_ENABLED' }
 }
 
-export async function revokeAltanaSession() {
-  throw new Error('Altana revocation requires the persisted wallet signer and session object; no destructive operation was attempted.')
-}
-
-export async function verifyAltanaSession() {
-  return { verified: false, reason: 'Verification requires a persisted Altana session key and onchain reference.' }
+export async function verifySession(session: AltanaSession) {
+  return { verified: session.simulated, simulated: session.simulated, reason: session.simulated ? 'SIMULATION_SESSION' : 'ONCHAIN_VERIFICATION_NOT_ENABLED' }
 }
