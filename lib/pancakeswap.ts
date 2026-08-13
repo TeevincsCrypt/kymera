@@ -18,9 +18,11 @@ const CHAIN = process.env.PANCAKESWAP_CHAIN?.trim() || 'bsc'
 
 async function query<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   if (!ENDPOINT) throw new Error('PancakeSwap live data is not configured. Set PANCAKESWAP_SUBGRAPH_URL.')
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  if (process.env.THEGRAPH_API_KEY?.trim()) headers.authorization = `Bearer ${process.env.THEGRAPH_API_KEY.trim()}`
   const response = await fetch(ENDPOINT, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(12_000),
   })
@@ -40,7 +42,7 @@ function normalizePool(row: Record<string, unknown>): PancakePool {
   const token0 = row.token0 as Record<string, unknown> | undefined
   const token1 = row.token1 as Record<string, unknown> | undefined
   const tvlUsd = numberOrNull(row.totalValueLockedUSD ?? row.tvlUSD)
-  const volume24hUsd = numberOrNull(row.volumeUSD24H ?? row.volume24hUSD)
+  const volume24hUsd = numberOrNull(row.volumeUSD24H ?? row.volume24hUSD ?? row.volumeUSD)
   const apr = numberOrNull(row.apr ?? row.apr24h)
   const feeApr = numberOrNull(row.feeApr ?? row.feeAPR)
   const risk = tvlUsd === null ? 'Unknown' : tvlUsd >= 10_000_000 ? 'Lower' : tvlUsd >= 1_000_000 ? 'Moderate' : 'Higher'
@@ -60,7 +62,8 @@ export async function getPancakeStatus() {
 }
 
 export async function listPancakePools(search = '', limit = 12): Promise<PancakePool[]> {
-  const data = await query<{ pools?: Array<Record<string, unknown>> }>(`query Pools($first: Int!, $search: String) { pools(first: $first, orderBy: totalValueLockedUSD, orderDirection: desc, where: { id_contains: $search }) { id feeTier totalValueLockedUSD volumeUSD24H apr feeApr updatedAt token0 { id symbol decimals } token1 { id symbol decimals } } }`, { first: Math.min(50, Math.max(1, limit)), search: search.toLowerCase() })
+  const filter = search.trim() ? `, where: { id_contains: $search }` : ''
+  const data = await query<{ pools?: Array<Record<string, unknown>> }>(`query Pools($first: Int!, $search: String) { pools(first: $first, orderBy: totalValueLockedUSD, orderDirection: desc${filter}) { id feeTier totalValueLockedUSD volumeUSD token0 { id symbol decimals } token1 { id symbol decimals } } }`, { first: Math.min(50, Math.max(1, limit)), search: search.toLowerCase() })
   return (data.pools || []).map(normalizePool)
 }
 
