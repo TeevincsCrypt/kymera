@@ -203,6 +203,22 @@ model AltanaExecution {
   @@index([agentId, createdAt])
 }
 
+model AgentJob {
+  id          String   @id @default(cuid())
+  chainId     Int
+  network     String
+  client      String
+  provider    String
+  evaluator   String
+  budget      Decimal  @db.Decimal(18, 8)
+  status      String
+  simulated   Boolean  @default(true)
+  txHash      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([network, status])
+}
+
 model AgentAuditLog {
   id           String       @id @default(cuid())
   sessionId    String

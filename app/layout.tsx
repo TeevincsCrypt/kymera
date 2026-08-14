@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { KymeraShell } from '@/components/kymera-shell'
+import { Web3Provider } from '@/components/web3-provider'
 
 export const metadata: Metadata = {
   title: 'KYMERA — Discover better agents',
@@ -39,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-[#fafaf9]">
       <body className="antialiased">
-        <KymeraShell>{children}</KymeraShell>
+        <Web3Provider><KymeraShell>{children}</KymeraShell></Web3Provider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
