@@ -19,12 +19,13 @@ export async function executeKymera(input: ExecutionInput) {
   const agent = input.agentId ? await prisma.agent.findUnique({ where: { id: input.agentId }, include: { performance: true } }) : await prisma.agent.findFirst({ include: { performance: true } })
   if (!agent) throw new Error('AGENT_NOT_FOUND')
   const session = input.sessionId ? await prisma.agentSession.findFirst({ where: { id: input.sessionId, userAddress: input.userAddress }, include: { permissions: true } }) : await prisma.agentSession.findFirst({ where: { agentId: agent.id, userAddress: input.userAddress, status: 'Active' }, include: { permissions: true }, orderBy: { createdAt: 'desc' } })
-  let activeSession = session
+  let activeSession = input.demo ? null : session
   if (!activeSession && input.demo) {
-    activeSession = await prisma.agentSession.create({ data: { id: `demo_${crypto.randomUUID()}`, agentId: agent.id, userAddress: input.userAddress, spendingLimit: 100, expiresAt: new Date(Date.now() + 86400000), status: 'Active', mode: 'SIMULATION', permissions: { create: [{ permission: 'exactInputSingle', allowed: true }] } }, include: { permissions: true } })
+    const expired = input.demo === 'expiredSession'
+    activeSession = await prisma.agentSession.create({ data: { id: `demo_${crypto.randomUUID()}`, agentId: agent.id, userAddress: input.userAddress, spendingLimit: 100, expiresAt: new Date(Date.now() + (expired ? -3600000 : 86400000)), status: expired ? 'Expired' : 'Active', mode: 'SIMULATION', permissions: { create: [{ permission: 'exactInputSingle', allowed: true }] } }, include: { permissions: true } })
   }
   if (!activeSession) throw new Error('GUARD_SESSION_NOT_FOUND')
-  const simulatedSession: AltanaSession = { id: activeSession.id, wallet: activeSession.userAddress, agentId: activeSession.agentId, allowedContracts: ['0xPancakeRouter'], allowedMethods: activeSession.permissions.filter((p) => p.allowed).map((p) => p.permission), spendingCap: Number(activeSession.spendingLimit), expiry: activeSession.expiresAt.toISOString(), status: activeSession.status === 'Active' ? 'active' : 'revoked', simulated: activeSession.mode !== 'ALTANA_ONCHAIN' }
+  const simulatedSession: AltanaSession = { id: activeSession.id, wallet: activeSession.userAddress, agentId: activeSession.agentId, allowedContracts: ['0xPancakeRouter'], allowedMethods: activeSession.permissions.filter((p) => p.allowed).map((p) => p.permission), spendingCap: Number(activeSession.spendingLimit), expiry: activeSession.expiresAt.toISOString(), status: activeSession.status === 'Active' ? 'active' : activeSession.status === 'Expired' ? 'expired' : 'revoked', simulated: activeSession.mode !== 'ALTANA_ONCHAIN' }
   const decision = await executeAltana(simulatedSession, action)
   const score = agent.performance?.kymeraScore ?? 0
   const status = decision.approved ? 'SIMULATED_SUCCESS' : 'REJECTED'
@@ -34,4 +35,4 @@ export async function executeKymera(input: ExecutionInput) {
   return { receiptId: receipt.id, status, simulated: Boolean(decision.simulated), score, pipeline: ['AGENT_RESOLVED', 'KYМERA_SCORE_READ', 'GUARD_EVALUATED', 'ALTANA_SESSION_CHECKED', 'EXECUTION_RECORDED'], decision, action, altana: getAltanaStatus() }
 }
 
-export async function listExecutions(userAddress: string) { return prisma.altanaExecution.findMany({ where: { walletId: userAddress }, orderBy: { createdAt: 'desc' }, take: 30 }) }
+export async function listExecutions(userAddress: string) { const wallet = await prisma.altanaWallet.findUnique({ where: { address: userAddress }, select: { id: true } }); return wallet ? prisma.altanaExecution.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: 'desc' }, take: 30 }) : [] }
