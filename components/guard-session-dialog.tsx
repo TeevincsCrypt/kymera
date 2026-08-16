@@ -33,7 +33,7 @@ export function GuardSessionDialog({ agent, onCreated }: { agent: Agent; onCreat
     setTimeout(() => setOpen(false), 900)
   }
   return <>
-    <button className="rounded-lg bg-[#f45d22] px-4 py-2 text-sm font-semibold text-white" onClick={() => setOpen(true)}>Hire agent</button>
+    <button className="rounded-lg bg-[#f45d22] px-4 py-2 text-sm font-semibold text-white" onClick={() => setOpen(true)}>Hire agent (testnet)</button>
     {open && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#201d1a]/30 p-4" role="dialog" aria-modal="true" aria-labelledby="guard-title">
       <div className="w-full max-w-lg rounded-2xl border border-[#e7e2dc] bg-[#fffdfa] p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f45d22]">Kymera Guard</p><h2 id="guard-title" className="mt-2 text-xl font-semibold text-[#24211f]">Configure a Guard session</h2><p className="mt-1 text-sm text-[#77736c]">Bind this session to the connected wallet. Transaction signing still requires a separate testnet preview and confirmation.</p></div><button className="text-sm text-[#77736c]" onClick={() => setOpen(false)}>Close</button></div>
