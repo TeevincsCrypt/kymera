@@ -3,21 +3,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 import { WagmiProvider, createConfig, http } from 'wagmi'
-import { injected } from 'wagmi/connectors'
-import { kymeraChain } from '@/lib/web3/config'
+import { injected, walletConnect } from 'wagmi/connectors'
+import { bsc, kymeraChain } from '@/lib/web3/config'
+
+const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+const connectors = [
+  injected({ shimDisconnect: true }),
+  ...(walletConnectProjectId ? [walletConnect({ projectId: walletConnectProjectId, showQrModal: true })] : []),
+]
 
 const config = createConfig({
-  chains: [kymeraChain],
-  connectors: [injected({
-    shimDisconnect: true,
-    target: () => {
-      if (typeof window === 'undefined') return undefined
-      const ethereum = (window as Window & { ethereum?: { isRabby?: boolean; providers?: Array<{ isRabby?: boolean }> } }).ethereum
-      const provider = ethereum?.isRabby ? ethereum : ethereum?.providers?.find((candidate) => candidate?.isRabby)
-      return provider ? { id: 'rabby', name: 'Rabby', provider } : undefined
-    },
-  })],
-  transports: { [kymeraChain.id]: http() },
+  chains: [kymeraChain, bsc],
+  connectors,
+  transports: { [kymeraChain.id]: http(), [bsc.id]: http() },
 })
 
 export function Web3Provider({ children }: { children: React.ReactNode }) {
