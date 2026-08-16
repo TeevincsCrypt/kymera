@@ -5,7 +5,7 @@ import { getAltanaStatus, grantAltanaSession } from '@/lib/altana/provider'
 export const GUARD_PERMISSIONS = ['read_market_data', 'analyze_positions', 'execute_trades', 'move_funds', 'submit_transactions'] as const
 export type GuardPermission = (typeof GUARD_PERMISSIONS)[number]
 
-const dangerous = new Set<GuardPermission>(['move_funds', 'submit_transactions'])
+const dangerous = new Set<GuardPermission>(['move_funds'])
 
 export type CreateGuardInput = {
   agentId: string
@@ -21,7 +21,7 @@ export function validateGuardInput(input: CreateGuardInput) {
   if (!Number.isFinite(input.durationHours) || input.durationHours < 1 || input.durationHours > 720) throw new Error('Duration must be between 1 and 720 hours')
   if (input.spendingLimit !== undefined && (!Number.isFinite(input.spendingLimit) || input.spendingLimit < 0 || input.spendingLimit > 1_000_000)) throw new Error('Spending limit must be between 0 and 1,000,000')
   if (permissions.some((permission) => !GUARD_PERMISSIONS.includes(permission as GuardPermission))) throw new Error('Unsupported permission requested')
-  if (permissions.some((permission) => dangerous.has(permission as GuardPermission))) throw new Error('Dangerous permissions require explicit wallet and chain enforcement; Kymera Guard does not grant them')
+  if (permissions.includes('move_funds')) throw new Error('MOVE_FUNDS_REQUIRES_EXPLICIT_WALLET_FLOW')
   return { ...input, permissions: permissions as GuardPermission[] }
 }
 

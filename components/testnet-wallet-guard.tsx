@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAccount, useConnect, useDisconnect, usePublicClient, useSwitchChain, useWalletClient } from 'wagmi'
 import { bsc, kymeraChain, getChainStatus } from '@/lib/web3/config'
 import { estimateJobTransaction, prepareJobTransaction, submitJobTransaction, waitForJobConfirmation } from '@/lib/erc8183/transactions'
@@ -20,6 +20,10 @@ export function TestnetWalletGuard() {
   const status = getChainStatus(chainId)
   const injectedConnector = connectors.find((candidate) => candidate.id === 'injected')
   const walletConnectConnector = connectors.find((candidate) => candidate.id === 'walletConnect')
+
+  useEffect(() => {
+    if (address) window.dispatchEvent(new CustomEvent('kymera:wallet-connected', { detail: { address } }))
+  }, [address])
 
   async function prepare() {
     setError(''); setHash('')
