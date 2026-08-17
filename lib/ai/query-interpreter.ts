@@ -30,7 +30,8 @@ export function interpretQuery(input: string): DiscoveryIntent {
   const protocol = protocols.find((item) => lower.includes(item.toLowerCase()))
   const capabilities = Object.entries(capabilityMap).filter(([key, values]) => lower.includes(key) || values.some((value) => lower.includes(value))).flatMap(([, values]) => values)
   const risk = lower.includes('low risk') || lower.includes('safe') ? 'low' : lower.includes('high risk') || lower.includes('aggressive') ? 'high' : undefined
-  const task = lower.includes('find') || lower.includes('need') || lower.includes('looking') || lower.includes('best') ? raw : undefined
+  const focused = Boolean(category || capabilities.length || protocol || risk || lower.includes('bnb') || lower.includes('bsc'))
+  const task = lower.includes('find') || lower.includes('need') || lower.includes('looking') || lower.includes('best') || focused ? raw : undefined
   const terms = lower.split(/[^a-z0-9-]+/).filter((term) => term.length > 2 && !['find', 'with', 'that', 'for', 'the', 'and', 'from', 'best'].includes(term))
   return { mode: task ? 'task' : 'browse', raw, task, category, capabilities: [...new Set(capabilities)], protocols: protocol ? [protocol] : [], chain: lower.includes('bnb') || lower.includes('bsc') ? 'BNB Chain' : undefined, risk, terms }
 }

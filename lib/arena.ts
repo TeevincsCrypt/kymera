@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 
-export type ArenaAgent = Prisma.AgentGetPayload<{ include: { performance: true; capabilityItems: true } }>
+export type ArenaAgent = Prisma.AgentGetPayload<{ include: { performance: true; capabilityItems: true; benchmarkResults: { select: { score: true } } } }>
 
 export type ArenaRanking = {
   agentId: string
@@ -45,18 +45,23 @@ function metadataQuality(agent: ArenaAgent) {
 
 function scoreAgent(agent: ArenaAgent, task: string, index: number): ArenaRanking {
   const haystack = text(agent)
-  const capabilityMatch = overlap(task, String(agent.capabilities))
-  const taskRelevance = Math.min(100, overlap(task, haystack) + (haystack.includes(agent.category.toLowerCase()) ? 18 : 0))
-  const protocolMatch = protocols.some((protocol) => task.toLowerCase().includes(protocol) && haystack.includes(protocol)) ? 100 : 35
+  const capabilityText = [...agent.capabilityItems.map((item) => item.name), ...(Array.isArray(agent.capabilities) ? agent.capabilities.map(String) : [])].join(' ')
+  const capabilityMatch = overlap(task, capabilityText)
+  const taskRelevance = Math.min(100, overlap(task, haystack) + (haystack.includes(agent.category.toLowerCase()) ? 18 : 0) + (haystack.includes(agent.chain.toLowerCase()) && task.toLowerCase().includes(agent.chain.toLowerCase()) ? 12 : 0))
+  const requestedProtocols = protocols.filter((protocol) => task.toLowerCase().includes(protocol))
+  const protocolMatch = requestedProtocols.length ? Math.round(requestedProtocols.filter((protocol) => haystack.includes(protocol)).length / requestedProtocols.length * 100) : Math.min(70, 25 + agent.supportedProtocols.length * 15)
   const metadata = metadataQuality(agent)
-  const evaluated = Boolean(agent.performance)
-  const evaluationConfidence = evaluated ? Math.min(100, 45 + Math.round((agent.performance?.tasksCompleted ?? 0) / 10)) : 0
-  const score = Math.round(capabilityMatch * 0.30 + taskRelevance * 0.25 + protocolMatch * 0.15 + metadata * 0.15 + (evaluated ? (agent.performance?.kymeraScore ?? 0) : 0) * 0.10 + evaluationConfidence * 0.05)
+  const persistedScores = agent.benchmarkResults.map((result) => result.score).filter((score): score is number => typeof score === 'number')
+  const persistedBenchmark = persistedScores.length ? Math.round(persistedScores.reduce((sum, score) => sum + score, 0) / persistedScores.length) : null
+  const evaluated = Boolean(agent.performance || persistedBenchmark !== null)
+  const evaluationConfidence = evaluated ? Math.min(100, 45 + Math.round((agent.performance?.tasksCompleted ?? persistedScores.length * 5) / 10)) : 0
+  const evidenceScore = agent.performance?.kymeraScore ?? persistedBenchmark ?? 0
+  const score = Math.round(capabilityMatch * 0.30 + taskRelevance * 0.25 + protocolMatch * 0.15 + metadata * 0.15 + evidenceScore * 0.10 + evaluationConfidence * 0.05)
   const reasons = [
     capabilityMatch >= 45 ? 'Strong capability overlap' : 'Limited capability overlap',
     taskRelevance >= 45 ? 'Relevant indexed metadata' : 'Partial task relevance',
     agent.erc8004TokenId ? 'ERC-8004 identity verified' : 'Identity metadata incomplete',
-    evaluated ? `Kymera score ${Math.round(agent.performance?.kymeraScore ?? 0)}/100` : 'Not yet evaluated',
+    evaluated ? `Persisted evaluation evidence ${Math.round(evidenceScore)}/100` : 'Not yet evaluated',
   ]
   return { agentId: agent.id, name: agent.name, rank: index + 1, score, evaluated, capabilityMatch, taskRelevance, protocolMatch, metadataQuality: metadata, evaluationConfidence, reasons }
 }

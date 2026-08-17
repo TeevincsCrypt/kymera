@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     const agents = await prisma.agent.findMany({
       where: { id: { in: agentIds } },
-      include: { performance: true, capabilityItems: true },
+      include: { performance: true, capabilityItems: true, benchmarkResults: { select: { score: true } } },
     })
     if (agents.length < 2) return NextResponse.json({ error: 'Two selected agents were not found in the index.' }, { status: 404 })
 
