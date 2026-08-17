@@ -14,7 +14,7 @@ export async function getAgents(filters: AgentFilters = {}) {
   return prisma.agent.findMany({ where, include: { performance: true, capabilityItems: true, benchmarkResults: { select: { score: true } } }, orderBy: filters.sort === 'newest' ? { createdAt: 'desc' } : { performance: { kymeraScore: 'desc' } } })
 }
 
-export async function getAgentById(id: string) { return prisma.agent.findUnique({ where: { id }, include: { performance: true, capabilityItems: true, sessions: { include: { permissions: true } }, transactions: true } }) }
+export async function getAgentById(id: string) { return prisma.agent.findUnique({ where: { id }, include: { performance: true, capabilityItems: true, benchmarkResults: { select: { score: true } }, sessions: { include: { permissions: true } }, transactions: true } }) }
 export async function getAgentsByCategory(category: string) { return getAgents({ category }) }
 export async function getTopAgents(limit = 6) { return prisma.agent.findMany({ take: limit, include: { performance: true, capabilityItems: true, benchmarkResults: { select: { score: true } } }, orderBy: { performance: { kymeraScore: 'desc' } } }) }
 export async function getAgentPerformance(agentId: string) { return prisma.agentPerformance.findUnique({ where: { agentId } }) }

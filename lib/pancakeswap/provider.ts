@@ -26,7 +26,7 @@ export type PancakeProviderHealth = {
 export interface PancakeProvider {
   getPools(search?: string, limit?: number): Promise<NormalizedPancakePool[]>
   getPool(address: string): Promise<NormalizedPancakePool | null>
-  getOpportunities(task: string): Promise<NormalizedPancakePool[]>
+  getOpportunities(task: string): Promise<Array<NormalizedPancakePool & { opportunityScore: number; opportunityReason: string }>>
   health(): Promise<PancakeProviderHealth>
 }
 
@@ -60,10 +60,17 @@ class OfficialSubgraphProvider implements PancakeProvider {
     const pools = await this.getPools(address, 1)
     return pools[0] ?? null
   }
-  async getOpportunities(task: string) { return this.getPools('', 12) }
+  async getOpportunities(task: string) {
+    const pools = await this.getPools('', 24)
+    const lower = task.toLowerCase()
+    return pools
+      .map((pool) => ({ ...pool, opportunityScore: Math.round((pool.apr ?? 0) * 0.55 + Math.min(100, Math.log10(Math.max(pool.tvl ?? 0, 1)) * 7) * 0.3 + (lower.includes('low') && pool.tvl && pool.tvl >= 1_000_000 ? 15 : 0)), opportunityReason: pool.apr == null ? 'APR unavailable; review TVL and volume before acting.' : `${pool.token0}/${pool.token1} ranked from live TVL, volume, APR, and fee-tier data.` }))
+      .sort((a, b) => (b.opportunityScore ?? 0) - (a.opportunityScore ?? 0))
+      .slice(0, 12)
+  }
   async health() {
     const status = await getPancakeStatus()
-    return { status: status.sourceStatus, source: status.source, chain: status.chain, checkedAt: new Date().toISOString() }
+    return { status: status.sourceStatus, source: status.source, chain: status.chain, checkedAt: new Date().toISOString(), details: status.details }
   }
 }
 

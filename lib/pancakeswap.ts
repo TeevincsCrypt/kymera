@@ -129,7 +129,7 @@ export async function listPancakePools(search = '', limit = 12): Promise<Pancake
   if (hasSearch && fields.has('id')) variables.search = search.trim()
   try {
     const data = await queryAt<{ pools?: Array<Record<string, unknown>> }>(source, query, variables)
-    state = { status: 'healthy', lastSuccessfulSource: source.name, lastSuccessfulFetch: new Date().toISOString() }
+    state = { ...state, status: 'healthy', lastSuccessfulSource: source.name, lastSuccessfulFetch: new Date().toISOString(), details: undefined }
     return ((data as Record<string, unknown[]>)[entity] || []).map(normalizePool).filter((pool) => pool.id)
   } catch (error) {
     const fallbackQuery = `query Pools($first: Int!) { ${entity}(first: $first) { ${selection} } }`
