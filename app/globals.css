@@ -7,20 +7,30 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-  --color-border: var(--border);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
   --color-ring: var(--ring);
   --radius-lg: .9rem;
   --radius-xl: 1rem;
+  --font-sans: 'Plus Jakarta Sans', 'Arial', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
 }
 
-:root { color-scheme: light; --background: #fafaf9; --foreground: #171717; --card: #ffffff; --card-foreground: #171717; --primary: #e95d25; --primary-foreground: #ffffff; --muted: #f6f5f2; --muted-foreground: #77736c; --border: #e9e7e2; --ring: #f3c8b5; }
+:root { color-scheme: light; --background: #fffaf6; --foreground: #241d18; --card: #ffffff; --card-foreground: #241d18; --popover: #ffffff; --popover-foreground: #241d18; --primary: #f26622; --primary-foreground: #ffffff; --secondary: #fff0e7; --secondary-foreground: #9b3e15; --muted: #f8eee8; --muted-foreground: #786e66; --accent: #ffd8bd; --accent-foreground: #7d3215; --border: #eadcd3; --input: #eadcd3; --ring: #f26622; }
 * { border-color: var(--border); }
-html { background: #fafaf9; }
-body { margin: 0; background: #fafaf9; color: #171717; font-family: Arial, Helvetica, sans-serif; }
+html { background: var(--background); }
+body { margin: 0; background: var(--background); color: var(--foreground); font-family: 'Plus Jakarta Sans', Arial, Helvetica, sans-serif; }
 button, a, select, input, textarea { font: inherit; }
 button { cursor: pointer; }
-::selection { background: #ffe1d3; color: #171717; }
+::selection { background: #ffd8bd; color: #241d18; }
+
