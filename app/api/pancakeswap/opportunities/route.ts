@@ -11,6 +11,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: { configured: health.status === 'healthy', chain: health.chain, source: health.source ?? 'none', execution: 'disabled' }, health, task, opportunities: await provider.getOpportunities(task), updatedAt: health.checkedAt })
   } catch (error) {
     const health = await getPancakeProvider().health()
-    return NextResponse.json({ status: { configured: health.status === 'healthy', chain: health.chain, source: health.source ?? 'none', execution: 'disabled' }, health, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
+    return NextResponse.json({ status: { configured: health.status === 'healthy', chain: health.chain, source: health.source ?? 'none', execution: 'disabled' }, health, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : health.details || 'PancakeSwap provider error' }, { status: 503 })
   }
 }

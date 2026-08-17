@@ -13,20 +13,27 @@ export type PancakePool = {
   risk: 'Lower' | 'Moderate' | 'Higher' | 'Unknown'
 }
 
-type SourceName = 'PancakeSwap configured subgraph' | 'PancakeSwap fallback subgraph'
-type Entity = 'pools' | 'pairs'
-type Source = { name: SourceName; url: string; entity?: Entity }
-type SourceState = { status: 'healthy' | 'unavailable' | 'not_configured'; lastSuccessfulSource: SourceName | null; lastSuccessfulFetch: string | null; details?: string }
+type SourceName = 'PancakeSwap V3 BNB primary' | 'PancakeSwap V3 BNB secondary' | 'PancakeSwap configured subgraph' | 'PancakeSwap fallback subgraph'
+type Entity = 'pools' | 'pool' | 'pairs' | 'liquidityPools' | 'liquidityPool'
+type Source = { name: SourceName; url: string; entity?: Entity; rootFields?: string[]; entityFields?: string[] }
+type SourceState = { status: 'healthy' | 'unavailable' | 'not_configured'; lastSuccessfulSource: SourceName | null; lastSuccessfulFetch: string | null; endpoint?: string; rootFields?: string[]; poolEntity?: string; samplePools?: number; details?: string }
 
-const PRIMARY_URL = process.env.PANCAKESWAP_SUBGRAPH_URL?.trim() || ''
+const PRIMARY_URL = 'https://gateway.thegraph.com/api/subgraphs/id/GfxzNT93ZkgAQwm6RP83iqJ6pBZj11HvFLUoEoX2PD5H'
+const SECONDARY_URL = 'https://gateway.thegraph.com/api/subgraphs/id/A1fvJWQLBeUAggX2WQTMm3FKjXTekNXo77ZySun4YN2m'
+const CONFIGURED_URL = process.env.PANCAKESWAP_SUBGRAPH_URL?.trim() || ''
 const FALLBACK_URL = process.env.PANCAKESWAP_SUBGRAPH_FALLBACK_URL?.trim() || ''
-const CHAIN = process.env.PANCAKESWAP_CHAIN?.trim() || 'bsc'
+const CHAIN = 'bsc'
 let state: SourceState = { status: 'not_configured', lastSuccessfulSource: null, lastSuccessfulFetch: null }
 
 function sources(): Source[] {
   const result: Source[] = []
-  if (PRIMARY_URL) result.push({ name: 'PancakeSwap configured subgraph', url: PRIMARY_URL })
-  if (FALLBACK_URL && FALLBACK_URL !== PRIMARY_URL) result.push({ name: 'PancakeSwap fallback subgraph', url: FALLBACK_URL })
+  const urls = [
+    { name: 'PancakeSwap V3 BNB primary' as const, url: PRIMARY_URL },
+    { name: 'PancakeSwap V3 BNB secondary' as const, url: SECONDARY_URL },
+    ...(CONFIGURED_URL ? [{ name: 'PancakeSwap configured subgraph' as const, url: CONFIGURED_URL }] : []),
+    ...(FALLBACK_URL ? [{ name: 'PancakeSwap fallback subgraph' as const, url: FALLBACK_URL }] : []),
+  ]
+  for (const source of urls) if (!result.some((item) => item.url === source.url)) result.push(source)
   return result
 }
 
@@ -46,16 +53,23 @@ async function queryAt<T>(source: Source, query: string, variables?: Record<stri
   return payload.data
 }
 
-const SCHEMA_QUERY = `{ __schema { queryType { fields { name } } } }`
+const SCHEMA_QUERY = `{ __schema { queryType { fields { name } } types { name kind fields { name } } } }`
+
+type SchemaResponse = { __schema?: { queryType?: { fields?: Array<{ name?: string }> }; types?: Array<{ name?: string; fields?: Array<{ name?: string }> }> } }
 
 async function inspectSource(source: Source): Promise<Source> {
-  const data = await queryAt<{ __schema?: { queryType?: { fields?: Array<{ name?: string }> } } }>(source, SCHEMA_QUERY)
-  const fields = new Set((data.__schema?.queryType?.fields || []).map((field) => field.name))
-  const entity = fields.has('pools') ? 'pools' : fields.has('pairs') ? 'pairs' : null
-  if (!entity) throw new Error('Query schema exposes neither pools nor pairs')
-  const inspected = { ...source, entity: entity as Entity }
-  const health = await queryAt<Record<string, unknown>>(inspected, `{ ${entity}(first: 1) { id } }`)
-  if (!health[entity]) throw new Error(`${entity} entity returned no data`)
+  const schema = await queryAt<SchemaResponse>(source, SCHEMA_QUERY)
+  const rootFields = (schema.__schema?.queryType?.fields || []).map((field) => field.name).filter((name): name is string => Boolean(name))
+  const entity = (['pools', 'pool', 'pairs', 'liquidityPools', 'liquidityPool'] as const).find((candidate) => rootFields.includes(candidate))
+  if (!entity) throw new Error(`No pool entity found; schema root fields: ${rootFields.join(', ')}`)
+  const typeName = entity.startsWith('liquidity') ? 'LiquidityPool' : entity === 'pairs' ? 'Pair' : 'Pool'
+  const entityType = schema.__schema?.types?.find((type) => type.name === typeName)
+  const entityFields = (entityType?.fields || []).map((field) => field.name).filter((name): name is string => Boolean(name))
+  const inspected = { ...source, entity, rootFields, entityFields }
+  const factoryProbe = rootFields.includes('factories') ? await queryAt<Record<string, unknown>>(inspected, `{ factories(first: 5) { id poolCount txCount totalVolumeUSD } }`) : null
+  if (rootFields.includes('factories') && !factoryProbe?.factories) throw new Error(`Factory probe returned no data; schema root fields: ${rootFields.join(', ')}`)
+  const sample = await queryAt<Record<string, unknown[]>>(inspected, `{ ${entity}(first: 10) { ${entityFields.includes('id') ? 'id' : ''} } }`)
+  state = { ...state, endpoint: source.url, rootFields, poolEntity: entity, samplePools: Array.isArray(sample[entity]) ? sample[entity].length : 0 }
   return inspected
 }
 
@@ -66,7 +80,7 @@ async function selectSource(): Promise<Source> {
   for (const source of configured) {
     try {
       const inspected = await inspectSource(source)
-      state = { status: 'healthy', lastSuccessfulSource: source.name, lastSuccessfulFetch: new Date().toISOString() }
+      state = { ...state, status: 'healthy', lastSuccessfulSource: source.name, lastSuccessfulFetch: new Date().toISOString() }
       return inspected
     } catch (error) {
       failures.push(`${source.name}: ${error instanceof Error ? error.message : 'unavailable'}`)
@@ -79,8 +93,9 @@ async function selectSource(): Promise<Source> {
 function numberOrNull(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null }
 
 function normalizePool(row: Record<string, unknown>): PancakePool {
-  const token0 = row.token0 as Record<string, unknown> | undefined
-  const token1 = row.token1 as Record<string, unknown> | undefined
+  const inputTokens = Array.isArray(row.inputTokens) ? row.inputTokens as Array<Record<string, unknown>> : []
+  const token0 = (row.token0 || inputTokens[0]) as Record<string, unknown> | undefined
+  const token1 = (row.token1 || inputTokens[1]) as Record<string, unknown> | undefined
   const tvlUsd = numberOrNull(row.totalValueLockedUSD ?? row.tvlUSD ?? row.liquidityUSD)
   const volume24hUsd = numberOrNull(row.volumeUSD24H ?? row.volume24hUSD ?? row.volumeUSD)
   const apr = numberOrNull(row.apr ?? row.apr24h)
@@ -92,8 +107,8 @@ function normalizePool(row: Record<string, unknown>): PancakePool {
 
 export async function getPancakeStatus() {
   const configured = sources().length > 0
-  try { await selectSource() } catch { state = { ...state, status: configured ? 'unavailable' : 'not_configured' } }
-  return { configured, chain: CHAIN, source: state.lastSuccessfulSource, sourceStatus: state.status, lastSuccessfulSource: state.lastSuccessfulSource, lastSuccessfulFetch: state.lastSuccessfulFetch, details: state.details ?? null, primaryConfigured: Boolean(PRIMARY_URL), fallbackConfigured: Boolean(FALLBACK_URL), execution: 'disabled' as const }
+  try { await selectSource() } catch (error) { state = { ...state, status: configured ? 'unavailable' : 'not_configured', details: error instanceof Error ? error.message : 'Unknown GraphQL provider error' } }
+  return { configured, chain: CHAIN, network: 'bsc', provider: 'pancakeswap-v3-bnb', endpoint: state.endpoint ?? null, source: state.lastSuccessfulSource, sourceStatus: state.status, lastSuccessfulSource: state.lastSuccessfulSource, lastSuccessfulFetch: state.lastSuccessfulFetch, details: state.details ?? null, primaryConfigured: true, fallbackConfigured: true, schemaCompatible: state.status === 'healthy', poolEntityAvailable: Boolean(state.poolEntity), poolEntity: state.poolEntity ?? null, rootFields: state.rootFields ?? [], samplePools: state.samplePools ?? 0, execution: 'disabled' as const }
 }
 
 export async function listPancakePools(search = '', limit = 12): Promise<PancakePool[]> {
@@ -101,16 +116,23 @@ export async function listPancakePools(search = '', limit = 12): Promise<Pancake
   const boundedLimit = Math.min(50, Math.max(1, Math.floor(limit) || 12))
   const hasSearch = Boolean(search.trim())
   const entity = source.entity || 'pools'
-  const where = hasSearch ? ', where: { id_contains_nocase: $search }' : ''
-  const query = `query Pools($first: Int!${hasSearch ? ', $search: String!' : ''}) { ${entity}(first: $first${entity === 'pools' ? ', orderBy: totalValueLockedUSD, orderDirection: desc' : ''}${where}) { id feeTier totalValueLockedUSD tvlUSD liquidityUSD reserveUSD volumeUSD volumeUSD24H volume24hUSD apr apr24h feeApr feeAPR updatedAt token0 { id symbol decimals } token1 { id symbol decimals } } }`
+  const fields = new Set(source.entityFields || [])
+  const scalar = ['id', 'feeTier', 'liquidity', 'sqrtPrice', 'tick', 'volumeUSD', 'volumeUSD24H', 'volume24hUSD', 'tvlUSD', 'totalValueLockedUSD', 'txCount', 'updatedAt'].filter((field) => fields.has(field)).join(' ')
+  const token = (name: string) => fields.has(name) ? `${name} { id symbol name decimals }` : ''
+  const tokens = fields.has('inputTokens') ? 'inputTokens { id symbol name decimals }' : ''
+  const selection = [scalar, token('token0'), token('token1'), tokens].filter(Boolean).join(' ')
+  if (!selection) throw new Error(`Pool entity ${entity} has no compatible fields`)
+  const where = hasSearch && fields.has('id') ? ', where: { id_contains_nocase: $search }' : ''
+  const order = entity === 'pools' && fields.has('totalValueLockedUSD') ? ', orderBy: totalValueLockedUSD, orderDirection: desc' : ''
+  const query = `query Pools($first: Int!${hasSearch && fields.has('id') ? ', $search: String!' : ''}) { ${entity}(first: $first${order}${where}) { ${selection} } }`
   const variables: Record<string, unknown> = { first: boundedLimit }
-  if (hasSearch) variables.search = search.trim()
+  if (hasSearch && fields.has('id')) variables.search = search.trim()
   try {
     const data = await queryAt<{ pools?: Array<Record<string, unknown>> }>(source, query, variables)
     state = { status: 'healthy', lastSuccessfulSource: source.name, lastSuccessfulFetch: new Date().toISOString() }
     return ((data as Record<string, unknown[]>)[entity] || []).map(normalizePool).filter((pool) => pool.id)
   } catch (error) {
-    const fallbackQuery = `query Pools($first: Int!) { ${entity}(first: $first${entity === 'pools' ? ', orderBy: totalValueLockedUSD, orderDirection: desc' : ''}) { id feeTier totalValueLockedUSD tvlUSD reserveUSD volumeUSD token0 { id symbol decimals } token1 { id symbol decimals } } }`
+    const fallbackQuery = `query Pools($first: Int!) { ${entity}(first: $first) { ${selection} } }`
     const data = await queryAt<Record<string, Array<Record<string, unknown>>>>(source, fallbackQuery, { first: boundedLimit })
     const normalized = ((data as Record<string, Array<Record<string, unknown>>>)[entity] || []).map(normalizePool).filter((pool) => !search.trim() || `${pool.id} ${pool.token0.symbol} ${pool.token1.symbol}`.toLowerCase().includes(search.trim().toLowerCase()))
     state = { status: 'healthy', lastSuccessfulSource: source.name, lastSuccessfulFetch: new Date().toISOString(), details: `Reduced schema fallback: ${error instanceof Error ? error.message : 'query rejected'}` }
