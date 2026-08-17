@@ -8,9 +8,9 @@ export async function POST(request: Request) {
     if (!task) return NextResponse.json({ error: 'Task is required' }, { status: 400 })
     const provider = getPancakeProvider()
     const health = await provider.health()
-    return NextResponse.json({ status: health.status, source: health.source, task, opportunities: await provider.getOpportunities(task), updatedAt: health.checkedAt })
+    return NextResponse.json({ status: { configured: health.status === 'healthy', chain: health.chain, source: health.source ?? 'none', execution: 'disabled' }, health, task, opportunities: await provider.getOpportunities(task), updatedAt: health.checkedAt })
   } catch (error) {
     const health = await getPancakeProvider().health()
-    return NextResponse.json({ status: health.status, source: health.source, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
+    return NextResponse.json({ status: { configured: health.status === 'healthy', chain: health.chain, source: health.source ?? 'none', execution: 'disabled' }, health, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
   }
 }
