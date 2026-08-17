@@ -52,7 +52,7 @@ function normalize(pool: PancakePool, chain: string, source: string): Normalized
 class OfficialSubgraphProvider implements PancakeProvider {
   async getPools(search = '', limit = 12) {
     const status = await getPancakeStatus()
-    if (status.sourceStatus !== 'healthy') throw new Error('Official PancakeSwap data unavailable')
+    if (status.sourceStatus !== 'healthy') throw new Error(status.details || 'PancakeSwap provider health check failed')
     const pools = await listPancakePools(search, limit)
     return pools.map((pool) => normalize(pool, status.chain, status.source || 'PancakeSwap official subgraph'))
   }

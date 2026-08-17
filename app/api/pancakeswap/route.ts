@@ -12,6 +12,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ status: health.status, source: health.source, opportunities, updatedAt: health.checkedAt })
   } catch (error) {
     const health = await getPancakeProvider().health()
-    return NextResponse.json({ status: health.status, source: health.source, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : 'PancakeSwap unavailable' }, { status: 503 })
+    return NextResponse.json({ status: health.status, source: health.source, opportunities: [], updatedAt: health.checkedAt, error: error instanceof Error ? error.message : health.details || 'PancakeSwap provider error' }, { status: 503 })
   }
 }
