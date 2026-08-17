@@ -10,10 +10,12 @@ export type DiscoveryIntent = {
   terms: string[]
 }
 
-const categories = ['Trading', 'Research', 'Operations', 'Creative']
+const categories = ['Trading', 'Research', 'Operations', 'Creative', 'Yield', 'Monitoring', 'Security', 'Analytics']
 const protocols = ['ERC-8004', 'A2A', 'MCP', 'x402', 'PancakeSwap', 'PancakeSwap V3']
 const capabilityMap: Record<string, string[]> = {
-  yield: ['yield', 'risk', 'trading'],
+  yield: ['yield', 'risk', 'trading', 'liquidity'],
+  monitoring: ['monitoring', 'monitor', 'alerts', 'watch'],
+  security: ['security', 'guard', 'audit', 'permissions'],
   research: ['research', 'market', 'sources', 'signals', 'data'],
   support: ['support', 'triage', 'crm', 'customer'],
   copy: ['copy', 'creative', 'brand', 'editorial'],

@@ -21,7 +21,13 @@ export async function discoverAgents(query: string, limit = 10) {
     ...(intent.chain ? { chain: { contains: intent.chain.replace(' Chain', ''), mode: 'insensitive' as const } } : {}),
   }
   const candidates = await prisma.agent.findMany({ where, take: 500, include: { performance: true, capabilityItems: true }, orderBy: { updatedAt: 'desc' } })
-  return { intent, results: rankCandidates(candidates, intent, limit) }
+  const filtered = candidates.filter((agent) => {
+    const text = values(agent)
+    if (intent.risk === 'low' && !/(low risk|safe|risk management|risk|guard)/.test(text)) return false
+    if (intent.risk === 'high' && !/(high risk|aggressive|trading)/.test(text)) return false
+    return true
+  })
+  return { intent, results: rankCandidates(filtered, intent, limit) }
 }
 
 function rankCandidates(candidates: Awaited<ReturnType<typeof prisma.agent.findMany>> extends infer _T ? any[] : never, intent: DiscoveryIntent, limit: number): DiscoveryResult[] {
