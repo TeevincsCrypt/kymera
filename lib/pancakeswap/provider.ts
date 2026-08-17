@@ -60,7 +60,7 @@ class OfficialSubgraphProvider implements PancakeProvider {
     const pools = await this.getPools(address, 1)
     return pools[0] ?? null
   }
-  async getOpportunities(task: string) { return this.getPools(task.match(/[A-Za-z0-9]+-[A-Za-z0-9]+/)?.[0] || '', 12) }
+  async getOpportunities(task: string) { return this.getPools('', 12) }
   async health() {
     const status = await getPancakeStatus()
     return { status: status.sourceStatus, source: status.source, chain: status.chain, checkedAt: new Date().toISOString() }
