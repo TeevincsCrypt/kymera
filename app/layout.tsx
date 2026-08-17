@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'light',
-  themeColor: '#fafaf9',
+  themeColor: '#fffaf6',
 }
 
 export default function RootLayout({
@@ -38,7 +38,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-[#fafaf9]">
+    <html lang="en" className="bg-background">
       <body className="antialiased">
         <Web3Provider><KymeraShell>{children}</KymeraShell></Web3Provider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
