@@ -2,8 +2,8 @@ import { listPancakePools, getPancakeStatus, type PancakePool } from '@/lib/panc
 
 export type NormalizedPancakePool = {
   address: string
-  token0: string
-  token1: string
+  token0: { address: string; symbol: string; decimals: number }
+  token1: { address: string; symbol: string; decimals: number }
   tvl: number | null
   volume24h: number | null
   fees24h: number | null
@@ -35,8 +35,8 @@ function normalize(pool: PancakePool, chain: string, source: string): Normalized
   const feeRate = pool.feeTier === null ? null : pool.feeTier / 1_000_000
   return {
     address: pool.id,
-    token0: pool.token0.symbol,
-    token1: pool.token1.symbol,
+    token0: pool.token0,
+    token1: pool.token1,
     tvl: pool.tvlUsd,
     volume24h: volume,
     fees24h: volume === null || feeRate === null ? null : volume * feeRate,
@@ -62,15 +62,15 @@ class OfficialSubgraphProvider implements PancakeProvider {
   }
   async getOpportunities(task: string) {
     const pools = await this.getPools('', 24)
-    const lower = task.toLowerCase()
+    const lower = String(task || '').toLowerCase()
     return pools
-      .map((pool) => ({ ...pool, opportunityScore: Math.round((pool.apr ?? 0) * 0.55 + Math.min(100, Math.log10(Math.max(pool.tvl ?? 0, 1)) * 7) * 0.3 + (lower.includes('low') && pool.tvl && pool.tvl >= 1_000_000 ? 15 : 0)), opportunityReason: pool.apr == null ? 'APR unavailable; review TVL and volume before acting.' : `${pool.token0}/${pool.token1} ranked from live TVL, volume, APR, and fee-tier data.` }))
+      .map((pool) => ({ ...pool, opportunityScore: Math.round((pool.apr ?? 0) * 0.55 + Math.min(100, Math.log10(Math.max(pool.tvl ?? 0, 1)) * 7) * 0.3 + (lower.includes('low') && (pool.tvl ?? 0) >= 1_000_000 ? 15 : 0)), opportunityReason: pool.apr == null ? 'APR unavailable; review TVL and volume before acting.' : `${pool.token0.symbol}/${pool.token1.symbol} ranked from live TVL, volume, APR, and fee-tier data.` }))
       .sort((a, b) => (b.opportunityScore ?? 0) - (a.opportunityScore ?? 0))
       .slice(0, 12)
   }
   async health() {
     const status = await getPancakeStatus()
-    return { status: status.sourceStatus, source: status.source, chain: status.chain, checkedAt: new Date().toISOString(), details: status.details }
+    return { status: status.sourceStatus, source: status.source, chain: status.chain, checkedAt: new Date().toISOString(), details: status.details ?? undefined }
   }
 }
 

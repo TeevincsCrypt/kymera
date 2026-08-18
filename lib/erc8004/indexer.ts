@@ -8,8 +8,8 @@ export async function upsertRegistration(identity: Erc8004Identity) {
   const metadata = await loadMetadata(registration.metadataUri)
   const data = {
     name: metadata.data.name || `ERC-8004 Agent ${identity.tokenId}`,
-    description: metadata.data.description || 'Registered autonomous agent.',
-    category: metadata.data.category || 'Research',
+    description: metadata.data.description || `ERC-8004 agent ${identity.tokenId}; registry metadata did not publish a description.`,
+    category: metadata.data.category || 'Operations',
     chain: 'BNB Chain',
     endpoint: metadata.data.endpoint || null,
     ownerAddress: registration.ownerAddress || metadata.data.ownerAddress || 'unknown',
@@ -24,7 +24,7 @@ export async function upsertRegistration(identity: Erc8004Identity) {
     erc8004MetadataUri: registration.metadataUri,
     erc8004MetadataHash: registration.metadataHash || metadata.hash,
     erc8004LastSyncedAt: new Date(),
-    erc8004RawRegistration: registration.raw,
+    erc8004RawRegistration: JSON.parse(JSON.stringify(registration.raw)),
   }
   const existing = await prisma.agent.findFirst({ where: { erc8004ChainId: identity.chainId, erc8004RegistryAddress: identity.registryAddress, erc8004TokenId: identity.tokenId }, select: { id: true } })
   return existing
