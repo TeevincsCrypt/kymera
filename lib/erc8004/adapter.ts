@@ -68,20 +68,27 @@ async function rpc(method: string, params: unknown[]) {
   return payload.result
 }
 
+const CATEGORY_RULES: Array<[string, RegExp]> = [['Trading', /trade|swap|arbitrage|market|portfolio|yield/i], ['Operations', /operation|workflow|automation|triage|monitor|alert|analytics/i], ['Creative', /creative|content|design|write|image|video|media/i], ['Security', /security|audit|guard|permission|risk|compliance/i], ['DeFi', /defi|liquidity|lending|staking|pool|pancake/i], ['Research', /research|analysis|search|summar/i]]
+
+function evidenceCategory(value: Record<string, unknown>) {
+  const evidence = [value.name, value.description, value.endpoint, ...(Array.isArray(value.capabilities) ? value.capabilities : []), ...(Array.isArray(value.supportedProtocols) ? value.supportedProtocols : [])].filter(Boolean).join(' ')
+  return typeof value.category === 'string' && value.category.trim() ? value.category.trim() : CATEGORY_RULES.find(([, rule]) => rule.test(evidence))?.[0] || 'Operations'
+}
+
+function evidenceDescription(value: Record<string, unknown>, category: string) {
+  if (typeof value.description === 'string' && value.description.trim()) return value.description.trim()
+  const capabilities = Array.isArray(value.capabilities) ? value.capabilities.map(String).filter(Boolean).slice(0, 4) : []
+  const protocols = Array.isArray(value.supportedProtocols) ? value.supportedProtocols.map(String).filter(Boolean).slice(0, 3) : []
+  const evidence = [...capabilities, ...protocols]
+  return evidence.length ? `${category} agent focused on ${evidence.join(', ')} based on its registered capabilities and protocols.` : `${category} agent with metadata available from the ERC-8004 registry; detailed capabilities were not published.`
+}
+
 export function parseMetadata(input: unknown): Erc8004Metadata {
   if (!input || typeof input !== 'object') return {}
   const value = input as Record<string, unknown>
   const list = (key: string) => Array.isArray(value[key]) ? value[key].map(String).filter(Boolean) : undefined
-  return {
-    ...value,
-    name: typeof value.name === 'string' ? value.name : undefined,
-    description: typeof value.description === 'string' ? value.description : undefined,
-    category: typeof value.category === 'string' ? value.category : undefined,
-    capabilities: list('capabilities'),
-    supportedProtocols: list('supportedProtocols'),
-    endpoint: typeof value.endpoint === 'string' ? value.endpoint : undefined,
-    ownerAddress: typeof value.ownerAddress === 'string' ? value.ownerAddress : undefined,
-  }
+  const category = evidenceCategory(value)
+  return { ...value, name: typeof value.name === 'string' ? value.name : undefined, description: evidenceDescription(value, category), category, capabilities: list('capabilities'), supportedProtocols: list('supportedProtocols'), endpoint: typeof value.endpoint === 'string' ? value.endpoint : undefined, ownerAddress: typeof value.ownerAddress === 'string' ? value.ownerAddress : undefined }
 }
 
 export async function discoverIdentities(): Promise<Erc8004Identity[]> {

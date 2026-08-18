@@ -17,7 +17,7 @@ export type ArenaRanking = {
 }
 
 const protocols = ['a2a', 'mcp', 'x402', 'rest', 'graphql']
-const categories = ['Trading', 'Analytics', 'Automation', 'Research', 'Infrastructure']
+const categories = ['Trading', 'Research', 'Operations', 'Creative', 'Security', 'DeFi', 'Monitoring', 'Analytics']
 
 function text(agent: ArenaAgent) {
   return [agent.name, agent.description, agent.category, agent.chain, JSON.stringify(agent.capabilities), JSON.stringify(agent.supportedProtocols)].join(' ').toLowerCase()

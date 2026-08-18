@@ -1,4 +1,4 @@
-export type AgentCategory = 'Trading' | 'Research' | 'Operations' | 'Creative'
+export type AgentCategory = 'Trading' | 'Research' | 'Operations' | 'Creative' | 'Security' | 'DeFi' | 'Monitoring' | 'Analytics'
 
 export type Agent = {
   id: string
@@ -38,6 +38,6 @@ export const activity = [
 ]
 
 export const getAgent = (id: string) => agents.find((agent) => agent.id === id) ?? agents[0]
-export const categories = ['All', 'Trading', 'Research', 'Operations', 'Creative'] as const
+export const categories = ['All', 'Trading', 'Research', 'Operations', 'Creative', 'Security', 'DeFi', 'Monitoring', 'Analytics'] as const
 
-export function formatDateLabel() { return 'Demo data · refreshed today' }
+export function formatDateLabel() { return 'Live registry data · refreshed today' }

@@ -108,7 +108,7 @@ function normalizePool(row: Record<string, unknown>): PancakePool {
 export async function getPancakeStatus() {
   const configured = sources().length > 0
   try { await selectSource() } catch (error) { state = { ...state, status: configured ? 'unavailable' : 'not_configured', details: error instanceof Error ? error.message : 'Unknown GraphQL provider error' } }
-  return { configured, chain: CHAIN, network: 'bsc', provider: 'pancakeswap-v3-bnb', endpoint: state.endpoint ?? null, source: state.lastSuccessfulSource, sourceStatus: state.status, lastSuccessfulSource: state.lastSuccessfulSource, lastSuccessfulFetch: state.lastSuccessfulFetch, details: state.details ?? null, primaryConfigured: true, fallbackConfigured: true, schemaCompatible: state.status === 'healthy', poolEntityAvailable: Boolean(state.poolEntity), poolEntity: state.poolEntity ?? null, rootFields: state.rootFields ?? [], samplePools: state.samplePools ?? 0, execution: 'disabled' as const }
+  return { configured, chain: CHAIN, network: 'bsc', provider: 'pancakeswap-v3-bnb', endpoint: state.endpoint ?? null, source: state.lastSuccessfulSource, sourceStatus: state.status, lastSuccessfulSource: state.lastSuccessfulSource, lastSuccessfulFetch: state.lastSuccessfulFetch, details: state.details ?? null, primaryConfigured: true, fallbackConfigured: true, schemaCompatible: state.status === 'healthy', poolEntityAvailable: Boolean(state.poolEntity), poolEntity: state.poolEntity ?? null, rootFields: state.rootFields ?? [], samplePools: state.samplePools ?? 0, execution: 'wallet_signed' as const }
 }
 
 export async function listPancakePools(search = '', limit = 12): Promise<PancakePool[]> {
@@ -130,7 +130,7 @@ export async function listPancakePools(search = '', limit = 12): Promise<Pancake
   try {
     const data = await queryAt<{ pools?: Array<Record<string, unknown>> }>(source, query, variables)
     state = { ...state, status: 'healthy', lastSuccessfulSource: source.name, lastSuccessfulFetch: new Date().toISOString(), details: undefined }
-    return ((data as Record<string, unknown[]>)[entity] || []).map(normalizePool).filter((pool) => pool.id)
+    return ((data as Record<string, unknown[]>)[entity] || []).filter((row): row is Record<string, unknown> => Boolean(row && typeof row === 'object')).map(normalizePool).filter((pool) => pool.id)
   } catch (error) {
     const fallbackQuery = `query Pools($first: Int!) { ${entity}(first: $first) { ${selection} } }`
     const data = await queryAt<Record<string, Array<Record<string, unknown>>>>(source, fallbackQuery, { first: boundedLimit })

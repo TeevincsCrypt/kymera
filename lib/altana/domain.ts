@@ -1,6 +1,4 @@
-import { randomUUID } from 'node:crypto'
-
-export type AltanaMode = 'simulation' | 'testnet' | 'passkey'
+export type AltanaMode = 'testnet' | 'passkey'
 export type AltanaAction = { action: string; target: string; method: string; value?: number; parameters?: unknown }
 
 export type AltanaStatus = {
@@ -24,17 +22,13 @@ export type AltanaSession = {
   simulated: boolean
 }
 
-const mode = (process.env.ALTANA_MODE?.toLowerCase() || 'simulation') as AltanaMode
+const mode = (process.env.ALTANA_MODE?.toLowerCase() === 'passkey' ? 'passkey' : 'testnet') as AltanaMode
 const testnetKeyConfigured = Boolean(process.env.ALTANA_PRIVATE_KEY?.trim())
 
 export function getAltanaStatus(): AltanaStatus {
   if (mode === 'testnet' && !testnetKeyConfigured) return { available: false, mode, network: process.env.ALTANA_NETWORK || 'BNB Testnet', walletConfigured: false, reason: 'ALTANA_PRIVATE_KEY_NOT_CONFIGURED', signingEnabled: false }
   if (mode === 'passkey') return { available: false, mode, network: process.env.ALTANA_NETWORK || 'BNB Smart Chain', walletConfigured: false, reason: 'PASSKEY_FLOW_NOT_CONFIGURED', signingEnabled: false }
-  return { available: true, mode: 'simulation', network: process.env.ALTANA_NETWORK || 'BNB Testnet', walletConfigured: false, signingEnabled: false }
-}
-
-export function createSimulationSession(input: { agentId: string; wallet: string; allowedContracts: string[]; allowedMethods: string[]; spendingCap: number; expiry: Date }): AltanaSession {
-  return { id: `sim_${randomUUID()}`, wallet: input.wallet, agentId: input.agentId, allowedContracts: input.allowedContracts, allowedMethods: input.allowedMethods, spendingCap: input.spendingCap, expiry: input.expiry.toISOString(), status: 'active', simulated: true }
+  return { available: false, mode: 'testnet', network: process.env.ALTANA_NETWORK || 'BNB Testnet', walletConfigured: false, reason: 'ALTANA_SIGNING_NOT_CONFIGURED', signingEnabled: false }
 }
 
 export function evaluateSession(session: AltanaSession, input: AltanaAction) {
@@ -46,7 +40,3 @@ export function evaluateSession(session: AltanaSession, input: AltanaAction) {
   return { approved: true, reason: 'GUARD_POLICY_APPROVED' }
 }
 
-export function simulateExecution(session: AltanaSession, input: AltanaAction) {
-  const decision = evaluateSession(session, input)
-  return { ...decision, simulated: true, txHash: undefined, receiptId: `sim_exec_${randomUUID()}` }
-}
