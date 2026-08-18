@@ -16,8 +16,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       discovered: stats.scanned,
       created: stats.imported,
-      updated: stats.updated,
-      failed: stats.failed,
       source: '8004scan',
       ...stats,
       agentsDiscovered: stats.scanned,

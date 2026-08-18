@@ -4,7 +4,7 @@ export type PancakeAction = 'swap' | 'add_liquidity' | 'remove_liquidity'
 
 export const PANCAKE_V3_ROUTER: Record<number, Address> = {
   56: '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4',
-  97: '0x9A0d7e7fB9cC0eA7E4e2d3fB5a8D3c1f0D1cD2e3',
+  97: '0x1b81D678ffb9C0263b24A97847620C99d213eB14',
 }
 
 export function validateActionInput(input: { action?: string; tokenIn?: string; tokenOut?: string; amount?: string; decimals?: number }) {

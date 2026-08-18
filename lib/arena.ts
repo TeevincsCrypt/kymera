@@ -49,7 +49,7 @@ function scoreAgent(agent: ArenaAgent, task: string, index: number): ArenaRankin
   const capabilityMatch = overlap(task, capabilityText)
   const taskRelevance = Math.min(100, overlap(task, haystack) + (haystack.includes(agent.category.toLowerCase()) ? 18 : 0) + (haystack.includes(agent.chain.toLowerCase()) && task.toLowerCase().includes(agent.chain.toLowerCase()) ? 12 : 0))
   const requestedProtocols = protocols.filter((protocol) => task.toLowerCase().includes(protocol))
-  const protocolMatch = requestedProtocols.length ? Math.round(requestedProtocols.filter((protocol) => haystack.includes(protocol)).length / requestedProtocols.length * 100) : Math.min(70, 25 + agent.supportedProtocols.length * 15)
+  const protocolMatch = requestedProtocols.length ? Math.round(requestedProtocols.filter((protocol) => haystack.includes(protocol)).length / requestedProtocols.length * 100) : Math.min(70, 25 + (Array.isArray(agent.supportedProtocols) ? agent.supportedProtocols.length : 0) * 15)
   const metadata = metadataQuality(agent)
   const persistedScores = agent.benchmarkResults.map((result) => result.score).filter((score): score is number => typeof score === 'number')
   const persistedBenchmark = persistedScores.length ? Math.round(persistedScores.reduce((sum, score) => sum + score, 0) / persistedScores.length) : null

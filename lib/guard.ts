@@ -31,7 +31,7 @@ export async function createGuardSession(input: CreateGuardInput) {
   const altana = getAltanaStatus()
   let grant: Awaited<ReturnType<typeof grantAltanaSession>> | null = null
   if (altana.configured) grant = await grantAltanaSession({ expiry: expiresAt, spendLimit: valid.spendingLimit, permissions: valid.permissions })
-  const session = await prisma.agentSession.create({ data: { id: randomUUID(), agentId: valid.agentId, userAddress: valid.userAddress, spendingLimit: valid.spendingLimit, expiresAt, status: 'Active', mode: grant ? 'ALTANA_ONCHAIN' : 'SIMULATION', provider: grant ? 'ALTANA' : 'KYМERA_GUARD', walletAddress: grant?.walletAddress, providerSessionId: grant?.providerSessionId, network: grant?.network, verificationUrl: grant?.verificationUrl, grantTxHash: grant?.transactionHash, permissions: { create: valid.permissions.map((permission) => ({ permission, allowed: true })) } } })
+  const session = await prisma.agentSession.create({ data: { id: randomUUID(), agentId: valid.agentId, userAddress: valid.userAddress, spendingLimit: valid.spendingLimit, expiresAt, status: 'Active', mode: 'SIMULATION', provider: 'KYМERA_GUARD', permissions: { create: valid.permissions.map((permission) => ({ permission, allowed: true })) } } })
   await prisma.agentAuditLog.create({ data: { id: randomUUID(), sessionId: session.id, action: 'SESSION_CREATED', actorAddress: valid.userAddress, details: { permissions: valid.permissions, durationHours: valid.durationHours, spendingLimit: valid.spendingLimit, mode: grant ? 'ALTANA_ONCHAIN' : 'SIMULATION', provider: grant ? 'ALTANA' : 'KYМERA_GUARD' } } })
   return session
 }

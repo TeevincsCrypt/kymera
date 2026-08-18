@@ -11,7 +11,7 @@ export function prepareJobTransaction(input: { from: Address; provider: Address;
   const description = input.description ?? 'Kymera testnet agent job'
   const expiredAt = BigInt(Math.floor(Date.now() / 1000) + Math.max(input.expirySeconds ?? 3600, 300))
   const data = encodeFunctionData({ abi: agenticCommerceAbi, functionName: 'createJob', args: [input.provider, ERC8183_ADDRESSES.evaluatorRouter, expiredAt, description, ERC8183_ADDRESSES.evaluatorRouter] })
-  return { chainId: bscTestnet.id, from: input.from, to: ERC8183_ADDRESSES.agenticCommerce, data, value: 0n, method: 'createJob', description }
+  return { chainId: bscTestnet.id, from: input.from, to: ERC8183_ADDRESSES.agenticCommerce, data, value: BigInt(0), method: 'createJob', description }
 }
 
 export async function estimateJobTransaction(publicClient: PublicClient, tx: JobTransaction) {
