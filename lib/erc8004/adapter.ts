@@ -102,13 +102,17 @@ export async function readRegistration(identity: Erc8004Identity): Promise<Erc80
 }
 
 function normalizeRegistration(identity: Erc8004Identity, row: Record<string, unknown>): Erc8004Registration {
+  const nested = [row.metadata, row.agent, row.data].find((value) => value && typeof value === 'object') as Record<string, unknown> | undefined
   const metadata = parseMetadata({
-    ...(row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}),
-    name: row.name,
-    description: row.description,
-    image: row.image_url,
-    supportedProtocols: row.supported_protocols,
-    ownerAddress: row.owner_address,
+    ...(nested || {}),
+    name: row.name ?? row.agent_name ?? row.agentName ?? nested?.name,
+    description: row.description ?? row.agent_description ?? row.agentDescription ?? nested?.description,
+    category: row.category ?? row.agent_category ?? row.agentCategory ?? nested?.category,
+    image: row.image_url ?? row.image ?? nested?.image,
+    capabilities: row.capabilities ?? row.capability_items ?? nested?.capabilities,
+    supportedProtocols: row.supported_protocols ?? row.supportedProtocols ?? nested?.supportedProtocols,
+    endpoint: row.endpoint ?? row.agent_endpoint ?? nested?.endpoint,
+    ownerAddress: row.owner_address ?? row.ownerAddress ?? row.owner ?? nested?.ownerAddress,
   })
   return {
     ...identity,

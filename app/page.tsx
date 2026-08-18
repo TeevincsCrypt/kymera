@@ -1,2 +1,9 @@
 import { OverviewPage } from '@/components/overview-page'
-export default function Page() { return <OverviewPage /> }
+import { getAgents, toUiAgent } from '@/lib/agent-repository'
+
+export const dynamic = 'force-dynamic'
+
+export default async function Page() {
+  const records = await getAgents({ sort: 'score' })
+  return <OverviewPage agents={records.map(toUiAgent)} />
+}
