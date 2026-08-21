@@ -76,9 +76,13 @@ export function KymeraShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {session.isConnected && !session.isAuthenticated && (
-            <button type="button" onClick={() => void session.signIn()} disabled={session.authPending} className="rounded-xl bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
-              {session.authPending ? 'Waiting for signature…' : 'Sign in with wallet'}
-            </button>
+            <div>
+              <button type="button" onClick={() => void session.signIn()} disabled={session.authPending} className="w-full rounded-xl bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+                {session.authPending ? 'Waiting for signature…' : 'Sign in with wallet'}
+              </button>
+              {/* Without this the button looked inert whenever sign-in failed server-side. */}
+              {session.authError && <p className="mt-1.5 text-[10px] leading-4 text-destructive">{session.authError}</p>}
+            </div>
           )}
 
           <button

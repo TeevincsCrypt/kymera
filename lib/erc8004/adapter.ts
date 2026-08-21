@@ -68,11 +68,48 @@ async function rpc(method: string, params: unknown[]) {
   return payload.result
 }
 
-const CATEGORY_RULES: Array<[string, RegExp]> = [['Trading', /trade|swap|arbitrage|market|portfolio|yield/i], ['Operations', /operation|workflow|automation|triage|monitor|alert|analytics/i], ['Creative', /creative|content|design|write|image|video|media/i], ['Security', /security|audit|guard|permission|risk|compliance/i], ['DeFi', /defi|liquidity|lending|staking|pool|pancake/i], ['Research', /research|analysis|search|summar/i]]
+/**
+ * The categories the marketplace filters by. Every agent MUST end up in exactly one
+ * of these — a registry-supplied category that does not map here is normalised rather
+ * than passed through, otherwise the agent becomes unreachable behind every filter.
+ */
+export const AGENT_CATEGORIES = ['Trading', 'DeFi', 'Research', 'Analytics', 'Monitoring', 'Security', 'Operations', 'Creative'] as const
+export type AgentCategoryName = (typeof AGENT_CATEGORIES)[number]
 
-function evidenceCategory(value: Record<string, unknown>) {
-  const evidence = [value.name, value.description, value.endpoint, ...(Array.isArray(value.capabilities) ? value.capabilities : []), ...(Array.isArray(value.supportedProtocols) ? value.supportedProtocols : [])].filter(Boolean).join(' ')
-  return typeof value.category === 'string' && value.category.trim() ? value.category.trim() : CATEGORY_RULES.find(([, rule]) => rule.test(evidence))?.[0] || 'Operations'
+const CATEGORY_RULES: Array<[AgentCategoryName, RegExp]> = [
+  ['DeFi', /defi|liquidity|lending|borrow|staking|pool|pancake|amm|vault|farm|dex|swap/i],
+  ['Trading', /trade|trading|arbitrage|market maker|portfolio|yield|invest|price|signal|alpha|bot/i],
+  ['Security', /security|audit|guard|permission|risk|compliance|threat|exploit|scam|phish|safety/i],
+  ['Analytics', /analytic|data|metric|dashboard|index|statistic|chart|insight|onchain analysis/i],
+  ['Monitoring', /monitor|alert|watch|track|notify|observ|uptime|surveil/i],
+  ['Research', /research|analysis|analyse|analyze|search|summar|report|intelligence|due diligence/i],
+  ['Creative', /creative|content|design|write|writing|image|video|media|art|music|meme|social/i],
+  ['Operations', /operation|workflow|automation|triage|orchestrat|routing|task|assistant|agent ops|support/i],
+]
+
+/** Maps a free-text category onto the marketplace's fixed set. */
+function normalizeCategory(raw: unknown): AgentCategoryName | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  const value = raw.trim()
+  const exact = AGENT_CATEGORIES.find((category) => category.toLowerCase() === value.toLowerCase())
+  if (exact) return exact
+  return CATEGORY_RULES.find(([, rule]) => rule.test(value))?.[0] ?? null
+}
+
+export function evidenceCategory(value: Record<string, unknown>): AgentCategoryName {
+  const declared = normalizeCategory(value.category)
+  if (declared) return declared
+  const evidence = [
+    value.name,
+    value.description,
+    value.endpoint,
+    ...(Array.isArray(value.capabilities) ? value.capabilities : []),
+    ...(Array.isArray(value.supportedProtocols) ? value.supportedProtocols : []),
+    ...(Array.isArray((value as { tags?: unknown[] }).tags) ? (value as { tags: unknown[] }).tags : []),
+  ].filter(Boolean).join(' ')
+  // Falls back to Operations only when nothing at all matched, which is a real
+  // statement about the metadata rather than a silent default.
+  return CATEGORY_RULES.find(([, rule]) => rule.test(evidence))?.[0] ?? 'Operations'
 }
 
 function evidenceDescription(value: Record<string, unknown>, category: string) {
@@ -91,9 +128,18 @@ export function parseMetadata(input: unknown): Erc8004Metadata {
   return { ...value, name: typeof value.name === 'string' ? value.name : undefined, description: evidenceDescription(value, category), category, capabilities: list('capabilities'), supportedProtocols: list('supportedProtocols'), endpoint: typeof value.endpoint === 'string' ? value.endpoint : undefined, ownerAddress: typeof value.ownerAddress === 'string' ? value.ownerAddress : undefined }
 }
 
+/**
+ * Every agent the index reports for the configured chain.
+ *
+ * This deliberately does NOT filter by a hardcoded registry address. BNB Chain has
+ * multiple ERC-8004 registry deployments, and filtering to one built-in address
+ * silently discarded every agent registered anywhere else — which looked exactly like
+ * "the registry returned nothing".
+ */
 export async function discoverIdentities(): Promise<Erc8004Identity[]> {
   const result = await enumerateAllAgents()
-  return result.identities.filter((item) => item.registryAddress.toLowerCase() === getBnbConfig().registryAddress.toLowerCase())
+  const chainId = getBnbConfig().chainId
+  return result.identities.filter((item) => !item.chainId || item.chainId === chainId)
 }
 
 export async function readRegistration(identity: Erc8004Identity): Promise<Erc8004Registration> {
@@ -131,14 +177,53 @@ function normalizeRegistration(identity: Erc8004Identity, row: Record<string, un
   }
 }
 
-export async function loadMetadata(uri: string): Promise<{ data: Erc8004Metadata; hash: string }> {
-  if (!uri) return { data: {}, hash: createHash('sha256').update('{}').digest('hex') }
-  const parsed = new URL(uri)
-  if (!['https:', 'ipfs:'].includes(parsed.protocol)) throw new Error('Unsupported ERC-8004 metadata URI protocol')
-  if (parsed.protocol === 'ipfs:') throw new Error('IPFS metadata requires an HTTP gateway configuration')
-  const response = await fetch(parsed, { signal: AbortSignal.timeout(12_000) })
-  if (!response.ok) throw new Error(`Metadata returned ${response.status}`)
-  const text = await response.text()
-  try { return { data: parseMetadata(JSON.parse(text)), hash: createHash('sha256').update(text).digest('hex') } }
-  catch { throw new Error('ERC-8004 agentURI metadata is not valid JSON') }
+const IPFS_GATEWAY = process.env.IPFS_GATEWAY_URL?.trim() || 'https://ipfs.io/ipfs/'
+
+function resolveMetadataUrl(uri: string): URL | null {
+  try {
+    const parsed = new URL(uri)
+    if (parsed.protocol === 'https:') return parsed
+    // IPFS is extremely common for agent metadata; resolve it through a gateway
+    // instead of refusing it.
+    if (parsed.protocol === 'ipfs:') {
+      const path = uri.replace(/^ipfs:\/\/(ipfs\/)?/, '')
+      return new URL(`${IPFS_GATEWAY.replace(/\/$/, '')}/${path}`)
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export type MetadataLoad = { data: Erc8004Metadata; hash: string; ok: boolean; reason?: string }
+
+/**
+ * Fetches agentURI metadata. This NEVER throws.
+ *
+ * At registry scale a large share of agents publish metadata that is unreachable,
+ * rate-limited, or malformed. Throwing here previously discarded the entire agent,
+ * so a broken metadata host could erase most of the catalog. An agent's on-chain
+ * identity is valid evidence on its own, so a metadata failure degrades the record
+ * rather than dropping it.
+ */
+export async function loadMetadata(uri: string): Promise<MetadataLoad> {
+  const empty = { data: {} as Erc8004Metadata, hash: createHash('sha256').update('{}').digest('hex') }
+  if (!uri) return { ...empty, ok: false, reason: 'No metadata URI published' }
+
+  const url = resolveMetadataUrl(uri)
+  if (!url) return { ...empty, ok: false, reason: 'Unsupported metadata URI scheme' }
+
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(8_000), headers: { accept: 'application/json' } })
+    if (!response.ok) return { ...empty, ok: false, reason: `Metadata host returned ${response.status}` }
+    const text = await response.text()
+    try {
+      return { data: parseMetadata(JSON.parse(text)), hash: createHash('sha256').update(text).digest('hex'), ok: true }
+    } catch {
+      return { ...empty, ok: false, reason: 'Metadata is not valid JSON' }
+    }
+  } catch (error) {
+    const reason = error instanceof Error && error.name === 'TimeoutError' ? 'Metadata host timed out' : 'Metadata host unreachable'
+    return { ...empty, ok: false, reason }
+  }
 }

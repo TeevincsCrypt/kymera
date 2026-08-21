@@ -23,6 +23,8 @@ export function PancakeSwapPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [criteria, setCriteria] = useState<string[]>([])
+  const [reasons, setReasons] = useState<Record<string, string>>({})
 
   async function analyze() {
     setLoading(true); setError('')
@@ -35,6 +37,8 @@ export function PancakeSwapPage() {
       const payload = await response.json().catch(() => ({}))
       setStatus(payload.status || null)
       setLastUpdated(payload.updatedAt || new Date().toISOString())
+      setCriteria(payload.criteria || [])
+      setReasons(Object.fromEntries(((payload.opportunities || []) as Array<Record<string, any>>).map((item) => [item.address || item.id, item.opportunityReason])))
       setPools(
         (payload.opportunities || []).map((item: Record<string, any>) => ({
           id: item.address || item.id,
@@ -90,6 +94,14 @@ export function PancakeSwapPage() {
             <button type="button" onClick={analyze} disabled={loading} className="mt-5 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60">
               {loading ? 'Analyzing…' : 'Analyze pools'}
             </button>
+            {criteria.length > 0 && (
+              <div className="mt-4 rounded-xl bg-muted/60 p-3">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Criteria applied from your request</p>
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {criteria.map((item) => <li key={item} className="text-xs leading-5 text-foreground">• {item}</li>)}
+                </ul>
+              </div>
+            )}
             {error && <p className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
           </section>
 
@@ -139,9 +151,12 @@ export function PancakeSwapPage() {
                       <p className="mt-1 font-semibold tabular-nums">{pool.tvlUsd === null ? 'Unavailable' : `$${Math.round(pool.tvlUsd).toLocaleString()}`}</p>
                     </div>
                   </div>
+                  {reasons[pool.id] && (
+                    <p className="mt-4 rounded-lg bg-muted/50 px-3 py-2 text-[11px] leading-5 text-muted-foreground">{reasons[pool.id]}</p>
+                  )}
                   <Link
                     href={`/arena?task=${encodeURIComponent(`Compare agents for ${pool.token0.symbol}/${pool.token1.symbol} PancakeSwap pool analysis`)}`}
-                    className="mt-4 inline-block rounded-lg border border-border px-3 py-2 text-xs font-medium"
+                    className="mt-3 inline-block rounded-lg border border-border px-3 py-2 text-xs font-medium"
                   >
                     Compare agents
                   </Link>
