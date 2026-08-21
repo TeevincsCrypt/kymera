@@ -1,17 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getAltanaStatus } from '@/lib/altana/provider'
+import { requireWallet } from '@/lib/auth/require'
+import { allowedChainIds, mainnetEnabled } from '@/lib/guard/policy'
+import { paymentsAreDemo } from '@/lib/payments'
 
-export async function GET(request: NextRequest) {
-  const userAddress = request.nextUrl.searchParams.get('userAddress') || '0xDemoWallet'
-  const [agents, evaluated, hires, sessions, executions, blocked] = await Promise.all([
+export const dynamic = 'force-dynamic'
+
+export async function GET() {
+  const auth = await requireWallet()
+  if ('response' in auth) return auth.response
+  const wallet = auth.address
+
+  const [agents, evaluated, hires, sessions, authorized, blocked, confirmed] = await Promise.all([
     prisma.agent.count(),
-    prisma.agentPerformance.count(),
-    prisma.agentHire.count({ where: { userAddress, status: 'ACTIVE' } }),
-    prisma.agentSession.count({ where: { userAddress, status: 'Active' } }),
-    prisma.altanaExecution.count({ where: { wallet: { address: userAddress } } }),
-    prisma.altanaExecution.count({ where: { wallet: { address: userAddress }, status: 'REJECTED' } }),
+    prisma.agentEvaluation.count({ where: { sufficientEvidence: true } }),
+    prisma.agentHire.count({ where: { userAddress: wallet, status: 'ACTIVE' } }),
+    prisma.agentSession.count({ where: { userAddress: wallet, status: 'Active', expiresAt: { gt: new Date() } } }),
+    prisma.guardExecution.count({ where: { walletAddress: wallet, decision: 'APPROVED' } }),
+    prisma.guardExecution.count({ where: { walletAddress: wallet, decision: 'REJECTED' } }),
+    prisma.guardExecution.count({ where: { walletAddress: wallet, status: 'CONFIRMED' } }),
   ])
-  const altana = getAltanaStatus()
-  return NextResponse.json({ stats: { agents, evaluated, hires, sessions, executions, blocked }, security: { simulation: true, altana: altana.available, score: evaluated > 0, persistence: true } })
+
+  return NextResponse.json({
+    stats: { agents, evaluated, hires, sessions, authorized, blocked, confirmed },
+    posture: {
+      guard: 'enforced',
+      network: mainnetEnabled() ? 'testnet + mainnet' : 'testnet only',
+      allowedChains: allowedChainIds(),
+      payments: paymentsAreDemo() ? 'demo' : 'live',
+      custody: 'user-signed only',
+    },
+  })
 }

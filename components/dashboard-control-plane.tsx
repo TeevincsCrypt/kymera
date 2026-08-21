@@ -1,31 +1,107 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useWalletConnection } from '@/lib/web3/use-wallet-connection'
+import Link from 'next/link'
+import { useKymeraSession } from '@/lib/web3/kymera-session'
 
-const links = [
+type Stats = { agents: number; evaluated: number; hires: number; sessions: number; authorized: number; blocked: number; confirmed: number }
+type Posture = { guard: string; network: string; allowedChains: number[]; payments: string; custody: string }
+
+const links: Array<[string, string]> = [
   ['Discover agents', '/discover'],
   ['Compare in Arena', '/arena'],
+  ['Guard dry-run', '/simulate'],
   ['PancakeSwap data', '/pancakeswap'],
-  ['Session console', '#sessions'],
 ]
 
 export function DashboardControlPlane() {
-  const [stats, setStats] = useState<{ agents: number; evaluated: number; hires: number; sessions: number; executions: number; blocked: number } | null>(null)
-  const [security, setSecurity] = useState<{ simulation: boolean; altana: boolean; score: boolean; persistence: boolean } | null>(null)
-  const [message, setMessage] = useState('')
-  const { address } = useWalletConnection()
+  const session = useKymeraSession()
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [posture, setPosture] = useState<Posture | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!address) { setStats(null); setSecurity(null); return }
-    fetch(`/api/dashboard/stats?userAddress=${encodeURIComponent(address)}`).then((response) => response.json()).then((payload) => { setStats(payload.stats); setSecurity(payload.security) }).catch(() => setMessage('Dashboard metrics unavailable'))
-  }, [address])
+    if (!session.isAuthenticated) { setStats(null); setPosture(null); return }
+    fetch('/api/dashboard/stats', { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error || 'Metrics unavailable')
+        setStats(payload.stats); setPosture(payload.posture); setError('')
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Metrics unavailable'))
+  }, [session.isAuthenticated])
 
-  async function resetDemo() {
-    setMessage('Demo reset is isolated and non-destructive. Existing production data is never deleted.')
+  if (!session.isAuthenticated) {
+    return (
+      <section className="rounded-2xl border border-border bg-card p-6">
+        <p className="text-sm font-semibold">Sign in to load your workspace</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Kymera verifies wallet ownership with a signature before showing any wallet-scoped data. Nothing here is readable by address alone.
+        </p>
+      </section>
+    )
   }
 
-  if (!address) return <section className="rounded-2xl border border-foreground/10 bg-foreground p-5 text-[#fffaf5]"><p className="text-sm font-semibold">Connect your wallet to load dashboard metrics.</p><p className="mt-1 text-sm text-[#d6d0ca]">Stats and security state are scoped to the connected wallet.</p></section>
+  const tiles: Array<[string, string | number, string]> = [
+    ['Indexed agents', stats?.agents ?? '—', 'Agents in the catalog'],
+    ['Evaluated', stats?.evaluated ?? '—', 'Have enough evidence to score'],
+    ['Active hires', stats?.hires ?? '—', 'Engagements for your wallet'],
+    ['Guard sessions', stats?.sessions ?? '—', 'Active, unexpired permissions'],
+    ['Authorized', stats?.authorized ?? '—', 'Actions Guard approved'],
+    ['Blocked', stats?.blocked ?? '—', 'Actions Guard refused'],
+  ]
 
-  return <section className="rounded-2xl border border-foreground/10 bg-foreground p-5 text-[#fffaf5] shadow-[0_18px_42px_rgba(36,33,31,0.12)]"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#ffd8bd]">Kymera control plane</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">From discovery to receipt</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[#d6d0ca]">One demo surface for agent selection, Arena comparison, hire intent, Guard configuration, execution preview, and persistent audit history.</p></div><button onClick={resetDemo} className="rounded-lg border border-[#655e58] px-3 py-2 text-xs font-medium text-[#fffaf5] hover:border-[#ffd8bd]">Reset demo</button></div><div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">{[['Agents', stats?.agents ?? '—'], ['Evaluated', stats?.evaluated ?? '—'], ['Active hires', stats?.hires ?? '—'], ['Guard sessions', stats?.sessions ?? '—'], ['Executions', stats?.executions ?? '—'], ['Blocked', stats?.blocked ?? '—']].map(([label, value]) => <div key={label} className="rounded-xl border border-background/10 bg-foreground/80 p-3"><p className="text-[10px] uppercase tracking-[0.15em] text-[#a9a19a]">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>)}</div><div className="mt-5 grid gap-2 md:grid-cols-2"><div className="rounded-xl border border-background/10 bg-foreground/80 p-4"><p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#ffd8bd]">Runbook</p><div className="mt-3 flex flex-wrap gap-2">{links.map(([label, href]) => <a key={href} href={href} className="rounded-lg bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-[#ffd8bd]">{label}</a>)}</div></div><div className="rounded-xl border border-background/10 bg-foreground/80 p-4"><p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#ffd8bd]">Security state</p><div className="mt-3 grid gap-2 text-xs text-[#d6d0ca]">{security ? Object.entries({ Simulation: security.simulation, 'Altana connected': security.altana, 'Kymera Score': security.score, 'Neon persistence': security.persistence }).map(([label, value]) => <div key={label} className="flex items-center justify-between"><span>{label}</span><span className={value ? 'text-[#8fe0ad]' : 'text-[#ffd8bd]'}>{value ? 'Ready' : 'Unavailable'}</span></div>) : <span>Loading checks…</span>}</div></div></div>{message && <p className="mt-3 text-xs text-[#ffd8bd]">{message}</p>}</section>
+  return (
+    <section className="rounded-2xl border border-border bg-foreground p-5 text-background">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Control plane</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">From discovery to receipt</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-background/70">
+            Agent selection, comparison, permission grants, Guard-enforced execution, and a persistent audit trail — all scoped to your wallet.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+        {tiles.map(([label, value, hint]) => (
+          <div key={label} className="rounded-xl border border-background/10 bg-background/5 p-3" title={hint}>
+            <p className="text-[10px] uppercase tracking-[0.15em] text-background/50">{label}</p>
+            <p className="mt-2 text-xl font-semibold tabular-nums">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 grid gap-2 md:grid-cols-2">
+        <div className="rounded-xl border border-background/10 bg-background/5 p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-primary">Runbook</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {links.map(([label, href]) => (
+              <Link key={href} href={href} className="rounded-lg bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary">{label}</Link>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-background/10 bg-background/5 p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-primary">Security posture</p>
+          <dl className="mt-3 grid gap-1.5 text-xs text-background/70">
+            <Row label="Guard" value={posture?.guard ?? '…'} />
+            <Row label="Networks" value={posture?.network ?? '…'} />
+            <Row label="Custody" value={posture?.custody ?? '…'} />
+            <Row label="Payments" value={posture?.payments ?? '…'} />
+          </dl>
+        </div>
+      </div>
+
+      {error && <p className="mt-3 text-xs text-primary">{error}</p>}
+    </section>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt>{label}</dt>
+      <dd className="font-medium text-background">{value}</dd>
+    </div>
+  )
 }
