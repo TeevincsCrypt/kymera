@@ -103,24 +103,36 @@ export function CatalogBootstrap({ compact = false }: { compact?: boolean }) {
             </div>
           )}
 
-          {result && (
-            <div className={`mt-4 rounded-xl p-3 text-xs leading-6 ${result.syncStatus === 'success' ? 'bg-[#e8f6f0] text-[#0f6b4a]' : 'bg-destructive/10 text-destructive'}`}>
-              {result.syncStatus === 'success' ? (
-                <>
-                  Indexed <strong>{result.agentsDiscovered?.toLocaleString()}</strong> agents —{' '}
-                  {result.agentsCreated?.toLocaleString()} new, {result.agentsUpdated?.toLocaleString()} updated,{' '}
-                  {result.agentsScored?.toLocaleString()} scored
-                  {result.agentsFailed ? `, ${result.agentsFailed} failed` : ''}. Catalog now holds {result.catalogTotal?.toLocaleString()}.
-                </>
-              ) : (
-                <>
-                  <strong>Sync failed.</strong> {result.error}
-                  {result.hint && <span className="mt-1 block opacity-80">{result.hint}</span>}
-                  {result.errors?.length ? <span className="mt-1 block font-mono opacity-80">{result.errors[0]}</span> : null}
-                </>
-              )}
-            </div>
-          )}
+          {result && (() => {
+            // A sync that completed but wrote nothing is a failure in every sense that
+            // matters, so it must not be rendered in success green with the reason hidden.
+            const wroteNothing = Boolean(result.agentsFailed) && !result.agentsCreated && !result.agentsUpdated
+            const ok = result.syncStatus === 'success' && !wroteNothing
+            return (
+              <div className={`mt-4 rounded-xl p-3 text-xs leading-6 ${ok ? 'bg-[#e8f6f0] text-[#0f6b4a]' : 'bg-destructive/10 text-destructive'}`}>
+                {result.syncStatus === 'success' ? (
+                  <>
+                    {wroteNothing ? <strong>Every agent failed to save. </strong> : null}
+                    Read <strong>{result.agentsDiscovered?.toLocaleString()}</strong> agents from the registry —{' '}
+                    {result.agentsCreated?.toLocaleString()} new, {result.agentsUpdated?.toLocaleString()} updated,{' '}
+                    {result.agentsScored?.toLocaleString()} scored
+                    {result.agentsFailed ? `, ${result.agentsFailed.toLocaleString()} failed` : ''}. Catalog holds {result.catalogTotal?.toLocaleString()}.
+                  </>
+                ) : (
+                  <>
+                    <strong>Sync failed.</strong> {result.error}
+                    {result.hint && <span className="mt-1 block opacity-80">{result.hint}</span>}
+                  </>
+                )}
+                {/* Always surface the underlying reason — a failure count with no cause is undiagnosable. */}
+                {result.errors?.length ? (
+                  <span className="mt-2 block font-mono text-[11px] leading-5 opacity-90">
+                    {result.errors.slice(0, 2).map((message) => <span key={message} className="block">{message}</span>)}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>

@@ -64,11 +64,18 @@ async function main() {
   let migrationCount = 0
 
   try {
+    // Deliberately NOT to_regclass(): it returns Postgres's `regclass` type, which
+    // Prisma cannot deserialize, so the query throws before doing anything useful.
+    // information_schema returns plain integers that map cleanly.
     const tables = await prisma.$queryRawUnsafe(
-      `SELECT to_regclass('public."Agent"') AS agent, to_regclass('public._prisma_migrations') AS migrations`,
+      `SELECT
+         (SELECT count(*)::int FROM information_schema.tables
+           WHERE table_schema = 'public' AND table_name = 'Agent') AS agent,
+         (SELECT count(*)::int FROM information_schema.tables
+           WHERE table_schema = 'public' AND table_name = '_prisma_migrations') AS migrations`,
     )
-    hasAgentTable = Boolean(tables?.[0]?.agent)
-    const hasMigrationTable = Boolean(tables?.[0]?.migrations)
+    hasAgentTable = Number(tables?.[0]?.agent ?? 0) > 0
+    const hasMigrationTable = Number(tables?.[0]?.migrations ?? 0) > 0
 
     if (hasMigrationTable) {
       const rows = await prisma.$queryRawUnsafe('SELECT count(*)::int AS count FROM _prisma_migrations WHERE finished_at IS NOT NULL')
