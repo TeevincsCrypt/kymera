@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireWallet } from '@/lib/auth/require'
 import { cancelAuthorization, recordConfirmation, recordSubmission } from '@/lib/guard/execute'
 import { prisma } from '@/lib/prisma'
+import { activateHireFromPayment } from '@/lib/hiring'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,20 @@ export async function POST(request: Request) {
         error: stage === 'failed' ? String(body.error ?? 'TRANSACTION_REVERTED') : null,
       })
       await writeJobProjection(execution.id)
-      return NextResponse.json({ ok: true, status: execution.status })
+      // A confirmed hire payment is what actually activates the engagement, so the
+      // hire is only ever marked paid against a real, mined transaction.
+      let hire = null
+      if (stage === 'confirmed' && execution.action === 'hire_payment' && execution.hireId) {
+        hire = await activateHireFromPayment({
+          hireId: execution.hireId,
+          userAddress: auth.address,
+          chainId: execution.chainId,
+          txHash: execution.txHash ?? '',
+          recipient: execution.toAddress,
+          amountWei: execution.valueWei,
+        }).catch(() => null)
+      }
+      return NextResponse.json({ ok: true, status: execution.status, hire: hire?.hire ?? null, sessionId: hire?.sessionId ?? null })
     }
 
     if (stage === 'cancelled') {

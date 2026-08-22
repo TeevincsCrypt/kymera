@@ -30,6 +30,13 @@ export type Agent = {
   evaluatedAt: string | null
   /** Real Guard execution counts. Zeroes mean "none yet", never "unknown". */
   executions: { confirmed: number; rejected: number }
+  /** Registry provenance, so a user can independently verify the agent exists. */
+  registry: {
+    chainId: number | null
+    address: string | null
+    tokenId: string | null
+    metadataUri: string | null
+  } | null
 }
 
 export const categories = ['All', 'Trading', 'Research', 'Operations', 'Creative', 'Security', 'DeFi', 'Monitoring', 'Analytics'] as const

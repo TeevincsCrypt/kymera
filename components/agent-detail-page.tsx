@@ -110,6 +110,56 @@ export function AgentDetailPage({ agent, evaluation }: { agent: Agent | null; ev
             )}
           </section>
 
+          {/* Provenance is shown so realness can be checked independently rather than
+              taken on trust: these are the exact registry coordinates Kymera indexed. */}
+          <section className="mt-8 border-t border-border pt-6">
+            <h3 className="font-semibold">Registry provenance</h3>
+            {agent.registry ? (
+              <>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  Verify this agent yourself — these are the on-chain coordinates Kymera read it from.
+                </p>
+                <dl className="mt-3 grid gap-2 font-mono text-[11px] leading-5 sm:grid-cols-2">
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <dt className="text-muted-foreground">Registry contract</dt>
+                    <dd className="mt-1 break-all">{agent.registry.address ?? 'not published'}</dd>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <dt className="text-muted-foreground">Token ID</dt>
+                    <dd className="mt-1">{agent.registry.tokenId}</dd>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <dt className="text-muted-foreground">Chain</dt>
+                    <dd className="mt-1">{agent.registry.chainId === 56 ? 'BNB Smart Chain (56)' : agent.registry.chainId === 97 ? 'BNB Testnet (97)' : agent.registry.chainId ?? 'unknown'}</dd>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <dt className="text-muted-foreground">Owner</dt>
+                    <dd className="mt-1 break-all">{agent.creator}</dd>
+                  </div>
+                </dl>
+                {agent.registry.address && (
+                  <a
+                    href={`${agent.registry.chainId === 97 ? 'https://testnet.bscscan.com' : 'https://bscscan.com'}/address/${agent.registry.address}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-block text-xs font-semibold text-primary underline underline-offset-2"
+                  >
+                    View the registry contract on BscScan
+                  </a>
+                )}
+                {agent.registry.metadataUri && (
+                  <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                    Metadata: {agent.registry.metadataUri}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                This is a local catalog entry with no ERC-8004 registry identity, so there is nothing on-chain to verify against.
+              </p>
+            )}
+          </section>
+
           <section className="mt-8 border-t border-border pt-6">
             <h3 className="font-semibold">Declared capabilities</h3>
             {agent.tags.length ? (

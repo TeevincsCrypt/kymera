@@ -26,6 +26,63 @@ const HIRE_GRANTABLE_PERMISSIONS = GUARD_PERMISSIONS.filter(
  */
 const HIRE_SESSION_HOURS = 24
 
+/** A hire can only be paid on-chain if the agent has a real, resolvable owner address. */
+export function agentIsPayable(ownerAddress: string | null | undefined) {
+  const owner = normalizeAddress(ownerAddress)
+  return /^0x[a-f0-9]{40}$/.test(owner) && !/^0x0{40}$/.test(owner)
+}
+
+/**
+ * Marks a hire settled by an on-chain payment.
+ *
+ * Called only after Guard authorised the transfer and the transaction confirmed, so
+ * the txHash recorded here is a real, verifiable BNB Chain transaction — not a demo
+ * receipt. The read-only Guard session is created at the same moment.
+ */
+export async function activateHireFromPayment(input: {
+  hireId: string
+  userAddress: string
+  chainId: number
+  txHash: string
+  recipient: string
+  amountWei: string
+}) {
+  const wallet = normalizeAddress(input.userAddress)
+  const hire = await prisma.agentHire.findFirst({ where: { id: input.hireId, userAddress: wallet } })
+  if (!hire) throw new HireInputError('Hire not found', 'HIRE_NOT_FOUND')
+  if (hire.status === 'ACTIVE') return { hire, sessionId: hire.sessionId }
+
+  const permissions = Array.isArray(hire.requestedPermissions) ? (hire.requestedPermissions as string[]) : []
+  const session = hire.sessionId
+    ? null
+    : await createGuardSession({
+        agentId: hire.agentId,
+        userAddress: wallet,
+        durationHours: HIRE_SESSION_HOURS,
+        // Still no spending limit: paying for a hire never grants execution rights.
+        spendingLimit: undefined,
+        permissions,
+      })
+
+  const activated = await prisma.agentHire.update({
+    where: { id: hire.id },
+    data: {
+      status: 'ACTIVE',
+      paymentStatus: 'SETTLED',
+      paymentProvider: 'onchain',
+      paidAt: new Date(),
+      activatedAt: new Date(),
+      paymentChainId: input.chainId,
+      paymentTxHash: input.txHash,
+      paymentRecipient: normalizeAddress(input.recipient),
+      paymentAmountWei: input.amountWei,
+      sessionId: session?.id ?? hire.sessionId,
+    },
+    include: { agent: { select: { id: true, name: true } } },
+  })
+  return { hire: activated, sessionId: activated.sessionId }
+}
+
 export async function createHire(input: {
   agentId: string
   userAddress: string

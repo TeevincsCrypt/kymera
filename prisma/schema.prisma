@@ -76,6 +76,11 @@ model AgentHire {
   updatedAt            DateTime  @updatedAt
   paidAt               DateTime?
   activatedAt          DateTime?
+  /// On-chain hire payment: the chain, recipient, and transaction that settled it.
+  paymentChainId       Int?
+  paymentTxHash        String?
+  paymentRecipient     String?
+  paymentAmountWei     String?
   agent                Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([userAddress, status])
@@ -139,7 +144,9 @@ model AgentSession {
 /// cap is computed from. This is the only execution record Kymera keeps.
 model GuardExecution {
   id                   String       @id @default(cuid())
-  sessionId            String
+  /// Null for direct user payments (hiring), which Guard authorises against the hire
+  /// record itself rather than a delegated agent session.
+  sessionId            String?
   agentId              String
   walletAddress        String
   action               String
@@ -170,7 +177,9 @@ model GuardExecution {
   updatedAt            DateTime     @updatedAt
   submittedAt          DateTime?
   confirmedAt          DateTime?
-  session              AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session              AgentSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// Set when this execution is the on-chain payment for a hire.
+  hireId               String?
   agent                Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, asset, status])

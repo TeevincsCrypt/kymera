@@ -4,7 +4,9 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ACTION_CONSUMES_CAP,
+  ACTION_IS_VALUE_BEARING,
   ACTION_PERMISSION,
+  ACTION_REQUIRES_SESSION,
   BLOCKED_PERMISSIONS,
   PANCAKE_V3_ROUTER,
   allowedChainIds,
@@ -47,11 +49,38 @@ describe('Guard policy', () => {
     assert.ok(BLOCKED_PERMISSIONS.includes('move_funds'))
   })
 
-  test('every action maps to a required permission', () => {
+  test('every action has an explicit permission mapping', () => {
     for (const action of Object.keys(ACTION_PERMISSION)) {
       assert.ok(isGuardAction(action))
-      assert.ok(ACTION_PERMISSION[action as keyof typeof ACTION_PERMISSION])
+      // null is a deliberate value, not a missing entry: it marks an action that
+      // carries no delegated authority. The mapping must still be present.
+      assert.ok(action in ACTION_PERMISSION)
     }
+  })
+
+  test('session-backed actions require a permission; direct payments do not', () => {
+    for (const action of Object.keys(ACTION_REQUIRES_SESSION) as Array<keyof typeof ACTION_REQUIRES_SESSION>) {
+      if (ACTION_REQUIRES_SESSION[action]) {
+        assert.ok(ACTION_PERMISSION[action], `${action} is session-backed so it must name a permission`)
+      } else {
+        assert.equal(ACTION_PERMISSION[action], null, `${action} needs no session, so its permission must be null`)
+      }
+    }
+  })
+
+  test('hiring is a direct user payment, not a delegated agent action', () => {
+    assert.equal(ACTION_REQUIRES_SESSION.hire_payment, false)
+    assert.equal(ACTION_PERMISSION.hire_payment, null)
+    // It moves value, so it is still amount-checked — it just is not bounded by a
+    // session cap, because the hire's own agreed amount bounds it.
+    assert.equal(ACTION_IS_VALUE_BEARING.hire_payment, true)
+    assert.equal(ACTION_CONSUMES_CAP.hire_payment, false)
+  })
+
+  test('swaps and job submissions still require a session', () => {
+    assert.equal(ACTION_REQUIRES_SESSION.swap, true)
+    assert.equal(ACTION_REQUIRES_SESSION.approve_token, true)
+    assert.equal(ACTION_REQUIRES_SESSION.create_job, true)
   })
 
   test('an approval is capped but does not consume headroom, a swap does', () => {

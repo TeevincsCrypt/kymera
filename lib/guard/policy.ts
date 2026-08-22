@@ -112,6 +112,7 @@ export const GUARD_ACTIONS = [
   'create_job',
   'approve_token',
   'swap',
+  'hire_payment',
 ] as const
 
 export type GuardAction = (typeof GUARD_ACTIONS)[number]
@@ -120,11 +121,27 @@ export function isGuardAction(value: unknown): value is GuardAction {
   return typeof value === 'string' && (GUARD_ACTIONS as readonly string[]).includes(value)
 }
 
-/** Which session permission each on-chain action requires. */
-export const ACTION_PERMISSION: Record<GuardAction, GuardPermission> = {
+/**
+ * Which session permission each on-chain action requires.
+ *
+ * `null` means the action is not an agent acting under delegation, so no session
+ * permission applies. Hiring is the user paying an agent's owner directly from their
+ * own wallet — Guard still authorises the recipient, amount, and chain, but there is
+ * no delegated authority to check.
+ */
+export const ACTION_PERMISSION: Record<GuardAction, GuardPermission | null> = {
   create_job: 'submit_transactions',
   approve_token: 'execute_trades',
   swap: 'execute_trades',
+  hire_payment: null,
+}
+
+/** Actions that must be backed by an active agent session. */
+export const ACTION_REQUIRES_SESSION: Record<GuardAction, boolean> = {
+  create_job: true,
+  approve_token: true,
+  swap: true,
+  hire_payment: false,
 }
 
 /**
@@ -135,6 +152,7 @@ export const ACTION_IS_VALUE_BEARING: Record<GuardAction, boolean> = {
   create_job: false,
   approve_token: true,
   swap: true,
+  hire_payment: true,
 }
 
 /**
@@ -146,6 +164,8 @@ export const ACTION_CONSUMES_CAP: Record<GuardAction, boolean> = {
   create_job: false,
   approve_token: false,
   swap: true,
+  // Bounded by the hire record's own amount, not by a session cap.
+  hire_payment: false,
 }
 
 /* --------------------------------------------------------------- contracts */

@@ -42,7 +42,7 @@ export type GuardFlowState =
   | 'failed'
 
 export type AuthorizeRequest = {
-  action: 'create_job' | 'approve_token' | 'swap'
+  action: 'create_job' | 'approve_token' | 'swap' | 'hire_payment'
   chainId: number
   sessionId?: string
   agentId?: string
@@ -54,6 +54,8 @@ export type AuthorizeRequest = {
   feeTier?: number
   description?: string
   provider?: string
+  /** hire_payment only: links the ledger row to the hire it settles. */
+  hireId?: string
 }
 
 export type GuardFlowResult =

@@ -6,6 +6,8 @@ import { useKymeraSession } from '@/lib/web3/kymera-session'
 import { useGuardExecution } from '@/lib/web3/use-guard-execution'
 import { GuardDecisionPanel } from '@/components/guard-decision'
 import { KYMERA_CHAIN_ID } from '@/lib/web3/config'
+import { BSC_MAINNET_CHAIN_ID } from '@/lib/guard/policy'
+import { useSwitchChain } from 'wagmi'
 
 type Session = { id: string; agent?: { name?: string } | null; status: string; spendingLimit: string | number | null }
 
@@ -18,6 +20,7 @@ type Session = { id: string; agent?: { name?: string } | null; status: string; s
  */
 export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: string; tokenOut: string; feeTier?: number | null }) {
   const session = useKymeraSession()
+  const { switchChain } = useSwitchChain()
   const approve = useGuardExecution()
   const swap = useGuardExecution()
   const [amount, setAmount] = useState('')
@@ -58,21 +61,28 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
     )
   }
 
-  // Pool analytics are read from BNB mainnet; execution defaults to testnet. The same
-  // token has a different address on each, so signing a mainnet pool's tokens against
-  // testnet always reverts. Say so up front rather than letting the user approve first.
-  const executingOnTestnet = chainId === KYMERA_CHAIN_ID
-  if (executingOnTestnet) {
+  // These pools are indexed from BNB mainnet, so they are only swappable while the
+  // wallet is on mainnet. On testnet the same symbols live at different addresses and
+  // Guard would (correctly) reject the swap, so offer the network switch instead of a
+  // button that cannot work.
+  const onPoolChain = chainId === BSC_MAINNET_CHAIN_ID
+  if (!onPoolChain) {
     return (
       <div className="mt-4 rounded-xl border border-[#f1d5c8] bg-[#fff7f2] p-4">
-        <p className="text-xs font-semibold text-[#9d4925]">Not swappable from this pool</p>
+        <p className="text-xs font-semibold text-[#9d4925]">Switch to BNB mainnet to swap this pool</p>
         <p className="mt-1.5 text-[11px] leading-5 text-[#9d4925]/90">
-          These pool metrics are live from BNB <strong>mainnet</strong>, but Kymera executes on <strong>testnet</strong> by default.
-          This token pair does not exist at these addresses on testnet, so Guard would reject the swap.
+          These metrics are live from BNB <strong>mainnet</strong>. This pair exists at these addresses only there, so the swap must run on mainnet — with real funds.
         </p>
+        <button
+          type="button"
+          onClick={() => switchChain({ chainId: BSC_MAINNET_CHAIN_ID })}
+          className="mt-3 rounded-lg bg-[#9d4925] px-3 py-2 text-xs font-semibold text-white"
+        >
+          Switch wallet to BNB mainnet
+        </button>
         <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-          Use the Guard dry-run to exercise the authorization path, or set{' '}
-          <code className="rounded bg-background px-1">KYMERA_ENABLE_MAINNET=true</code> to execute against the pools shown here — which moves real funds.
+          Guard still enforces the router allowlist, method allowlist and your session spending limit before anything is signed. Mainnet execution also requires{' '}
+          <code className="rounded bg-background px-1">KYMERA_ENABLE_MAINNET=true</code> on the server.
         </p>
       </div>
     )

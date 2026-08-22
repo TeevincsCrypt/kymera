@@ -107,5 +107,13 @@ export function toUiAgent(agent: AgentRecord & { guardExecutionCounts?: { confir
     updated: agent.updatedAt.toISOString(),
     evaluatedAt: agent.kymeraEvaluatedAt ? agent.kymeraEvaluatedAt.toISOString() : null,
     executions: agent.guardExecutionCounts ?? { confirmed: 0, rejected: 0 },
+    registry: agent.erc8004TokenId
+      ? {
+          chainId: agent.erc8004ChainId,
+          address: agent.erc8004RegistryAddress,
+          tokenId: agent.erc8004TokenId,
+          metadataUri: agent.erc8004MetadataUri,
+        }
+      : null,
   }
 }

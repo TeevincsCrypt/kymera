@@ -13,6 +13,7 @@ import {
   ACTION_CONSUMES_CAP,
   ACTION_IS_VALUE_BEARING,
   ACTION_PERMISSION,
+  ACTION_REQUIRES_SESSION,
   BLOCKED_PERMISSIONS,
   ERC20_APPROVE_METHOD,
   GUARD_REASONS,
@@ -204,6 +205,30 @@ export async function evaluateGuard(input: GuardRequestInput): Promise<GuardDeci
   pass('chain', `chain ${chainId}`)
 
   // 4. Session ----------------------------------------------------------------
+  // Direct user payments (hiring) carry no delegated authority, so there is no session
+  // to check. Chain, address, and amount checks below still apply.
+  if (!ACTION_REQUIRES_SESSION[action]) {
+    pass('session', 'Direct user payment — no delegated session involved')
+    pass('session_owner', 'Payer is the authenticated wallet')
+    pass('session_status')
+    pass('session_expiry')
+    metadata.agentId = input.agentId ?? null
+    pass('agent', input.agentId ?? 'n/a')
+    pass('permission', 'No session permission required')
+
+    if (!isAddress(to)) { fail('contract', 'Recipient address malformed'); return deny(GUARD_REASONS.ADDRESS_INVALID) }
+    pass('contract', `recipient ${to}`)
+    pass('method', method || 'transfer')
+
+    if (amount.isNegative() || !amount.isFinite() || amount.lessThanOrEqualTo(0)) {
+      fail('amount', `Invalid amount '${input.amount}'`)
+      return deny(GUARD_REASONS.AMOUNT_INVALID)
+    }
+    pass('amount', `${amount.toString()} ${asset}`)
+    pass('spending_cap', 'Bounded by the agreed hire amount')
+    return { allowed: true, reason: GUARD_REASONS.APPROVED, message: GUARD_REASON_COPY.APPROVED, checks, metadata }
+  }
+
   const session = input.sessionId
     ? await prisma.agentSession.findUnique({ where: { id: input.sessionId }, include: { permissions: true } })
     : await prisma.agentSession.findFirst({
@@ -241,11 +266,15 @@ export async function evaluateGuard(input: GuardRequestInput): Promise<GuardDeci
   pass('agent', session.agentId)
 
   // 9. Permission -------------------------------------------------------------
-  const required: GuardPermission = ACTION_PERMISSION[action]
-  if (BLOCKED_PERMISSIONS.includes(required)) { fail('permission', `${required} is blocked by Kymera policy`); return deny(GUARD_REASONS.PERMISSION_BLOCKED) }
-  const granted = session.permissions.some((item) => item.permission === required && item.allowed)
-  if (!granted) { fail('permission', `Session does not grant ${required}`); return deny(GUARD_REASONS.PERMISSION_NOT_GRANTED) }
-  pass('permission', required)
+  const required: GuardPermission | null = ACTION_PERMISSION[action]
+  if (required === null) {
+    pass('permission', 'No session permission required')
+  } else {
+    if (BLOCKED_PERMISSIONS.includes(required)) { fail('permission', `${required} is blocked by Kymera policy`); return deny(GUARD_REASONS.PERMISSION_BLOCKED) }
+    const granted = session.permissions.some((item) => item.permission === required && item.allowed)
+    if (!granted) { fail('permission', `Session does not grant ${required}`); return deny(GUARD_REASONS.PERMISSION_NOT_GRANTED) }
+    pass('permission', required)
+  }
 
   // 10 & 11. Contract + method allowlists --------------------------------------
   if (action === 'approve_token') {

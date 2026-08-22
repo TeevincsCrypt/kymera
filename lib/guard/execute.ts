@@ -65,6 +65,8 @@ export type AuthorizeInput = {
   feeTier?: number | null
   description?: string | null
   provider?: string | null
+  /** Set for hire_payment so the ledger row links back to the hire it settled. */
+  hireId?: string | null
 }
 
 export type AuthorizeResult = {
@@ -85,6 +87,8 @@ function safeDecimals(value: number | null | undefined) {
 /** Resolve the asset + amount that Guard should reason about for this action. */
 function assetForAction(action: GuardAction, input: AuthorizeInput) {
   if (action === 'create_job') return { asset: NATIVE_ASSET, amount: '0' }
+  // A hire payment moves native BNB; `token` carries the recipient, not an ERC-20.
+  if (action === 'hire_payment') return { asset: NATIVE_ASSET, amount: input.amount ?? '0' }
   return { asset: normalizeAddress(input.token) || NATIVE_ASSET, amount: input.amount ?? '0' }
 }
 
@@ -93,6 +97,18 @@ function assetForAction(action: GuardAction, input: AuthorizeInput) {
 function buildTransaction(action: GuardAction, input: AuthorizeInput, amountOutMinimum: bigint): PreparedTransaction {
   const chainId = Number(input.chainId)
   const decimals = safeDecimals(input.decimals)
+
+  if (action === 'hire_payment') {
+    // A plain native-value transfer to the agent owner. No calldata: Kymera is not
+    // calling a contract, the user is paying a counterparty directly.
+    const to = normalizeAddress(input.token) as Address
+    const value = parseUnits(String(input.amount ?? '0'), 18).toString()
+    return {
+      chainId, to, data: '0x' as Hex, value, method: 'transfer', action,
+      txDataHash: hashTransaction(chainId, to, '0x', value),
+      summary: `Pay ${input.amount} BNB to the agent owner ${to.slice(0, 10)}…`,
+    }
+  }
 
   if (action === 'create_job') {
     const provider = (normalizeAddress(input.provider) || normalizeAddress(input.wallet)) as Address
@@ -238,8 +254,12 @@ export async function authorizeAction(input: AuthorizeInput): Promise<AuthorizeR
   const target =
     action === 'create_job' ? ERC8183_ADDRESSES.agenticCommerce
     : action === 'approve_token' ? (input.token ?? '')
+    : action === 'hire_payment' ? (input.token ?? '')
     : (PANCAKE_V3_ROUTER[Number(input.chainId)] ?? '')
-  const method = action === 'create_job' ? 'createJob' : action === 'approve_token' ? 'approve' : 'exactInputSingle'
+  const method = action === 'create_job' ? 'createJob'
+    : action === 'approve_token' ? 'approve'
+    : action === 'hire_payment' ? 'transfer'
+    : 'exactInputSingle'
 
   const decision = await evaluateGuard({
     wallet: input.wallet,
@@ -310,7 +330,7 @@ export async function authorizeAction(input: AuthorizeInput): Promise<AuthorizeR
 
   const tx = buildTransaction(action, input, amountOutMinimum)
 
-  if (action !== 'swap') {
+  if (action !== 'swap' && action !== 'hire_payment') {
     const sim = await simulateGeneric(action, input, tx)
     if (sim.attempted && !sim.ok) {
       const failed: GuardDecision = {
@@ -333,13 +353,15 @@ export async function authorizeAction(input: AuthorizeInput): Promise<AuthorizeR
 
   // Commit the authorization atomically, re-checking the cap to close the race
   // between two concurrent requests against the same session.
-  const sessionId = decision.metadata.sessionId as string
+  const sessionId = decision.metadata.sessionId
   const consumes = ACTION_CONSUMES_CAP[action]
   const committedAmount = consumes ? new Decimal(amount || 0) : new Decimal(0)
 
   try {
     const executionId = await prisma.$transaction(async (tx2) => {
-      if (consumes && committedAmount.greaterThan(0)) {
+      // Only session-backed actions consume cap headroom, so sessionId is always
+      // present here; the explicit check keeps that guarantee visible to the compiler.
+      if (consumes && sessionId && committedAmount.greaterThan(0)) {
         const session = await tx2.agentSession.findUnique({ where: { id: sessionId }, select: { spendingLimit: true, status: true, expiresAt: true } })
         if (!session || session.status !== 'Active' || session.expiresAt.getTime() <= Date.now()) throw new Error('SESSION_NO_LONGER_VALID')
         if (session.spendingLimit === null) throw new Error('SPENDING_CAP_UNSET')
@@ -375,6 +397,7 @@ export async function authorizeAction(input: AuthorizeInput): Promise<AuthorizeR
             simulation: simulation ? { ...simulation } : null,
             amountOutMinimum: amountOutMinimum.toString(),
           } as unknown as Prisma.InputJsonValue,
+          hireId: input.hireId ?? null,
           reservationExpiresAt: new Date(Date.now() + RESERVATION_WINDOW_MS),
         },
         select: { id: true },
@@ -382,15 +405,19 @@ export async function authorizeAction(input: AuthorizeInput): Promise<AuthorizeR
       return created.id
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 
-    await prisma.agentAuditLog.create({
-      data: {
-        id: randomUUID(),
-        sessionId,
-        action: 'GUARD_AUTHORIZED',
-        actorAddress: normalizeAddress(input.wallet),
-        details: { executionId, guardAction: action, asset, amount, txDataHash: tx.txDataHash } as unknown as Prisma.InputJsonValue,
-      },
-    }).catch(() => undefined)
+    // The audit log is keyed to a session, so it only applies to delegated actions.
+    // A direct user payment is fully recorded by its GuardExecution row instead.
+    if (sessionId) {
+      await prisma.agentAuditLog.create({
+        data: {
+          id: randomUUID(),
+          sessionId,
+          action: 'GUARD_AUTHORIZED',
+          actorAddress: normalizeAddress(input.wallet),
+          details: { executionId, guardAction: action, asset, amount, txDataHash: tx.txDataHash } as unknown as Prisma.InputJsonValue,
+        },
+      }).catch(() => undefined)
+    }
 
     return { decision: { ...decision, checks }, executionId, transaction: tx, simulation }
   } catch (error) {
@@ -406,7 +433,9 @@ export async function authorizeAction(input: AuthorizeInput): Promise<AuthorizeR
 /** Rejections are recorded too — a denied request is exactly what the audit log is for. */
 async function recordRejection(decision: GuardDecision, input: AuthorizeInput) {
   const sessionId = decision.metadata.sessionId
-  if (!sessionId || !decision.metadata.agentId) return
+  // A direct user payment has no session, but its rejection still belongs in the
+  // ledger — only a missing agent makes the row unwritable.
+  if (!decision.metadata.agentId) return
   try {
     await prisma.guardExecution.create({
       data: {
@@ -429,15 +458,17 @@ async function recordRejection(decision: GuardDecision, input: AuthorizeInput) {
         metadata: { ...decision.metadata, requestedAmount: decision.metadata.amount } as unknown as Prisma.InputJsonValue,
       },
     })
-    await prisma.agentAuditLog.create({
-      data: {
-        id: randomUUID(),
-        sessionId,
-        action: 'GUARD_REJECTED',
-        actorAddress: normalizeAddress(input.wallet),
-        details: { reason: decision.reason, guardAction: input.action } as unknown as Prisma.InputJsonValue,
-      },
-    })
+    if (sessionId) {
+      await prisma.agentAuditLog.create({
+        data: {
+          id: randomUUID(),
+          sessionId,
+          action: 'GUARD_REJECTED',
+          actorAddress: normalizeAddress(input.wallet),
+          details: { reason: decision.reason, guardAction: input.action } as unknown as Prisma.InputJsonValue,
+        },
+      })
+    }
   } catch {
     // A rejection that cannot be logged must still be a rejection.
   }

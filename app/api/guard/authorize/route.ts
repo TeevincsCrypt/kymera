@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       feeTier: body.feeTier === undefined ? null : Number(body.feeTier),
       description: typeof body.description === 'string' ? body.description : null,
       provider: typeof body.provider === 'string' ? body.provider : null,
+      hireId: typeof body.hireId === 'string' ? body.hireId : null,
     })
 
     return NextResponse.json(
