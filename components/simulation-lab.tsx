@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check, Minus, Play, ShieldAlert, ShieldCheck, X } from 'lucide-react'
 import { useKymeraSession } from '@/lib/web3/kymera-session'
+import { TestnetWalletGuard } from '@/components/testnet-wallet-guard'
 import { KYMERA_CHAIN_ID } from '@/lib/web3/config'
 
 type Agent = { id: string; name: string; category: string }
@@ -156,6 +157,18 @@ export function SimulationLab({ agents, initialAgentId }: { agents: Agent[]; ini
           )}
         </section>
       </div>
+
+      {/* The dry-run above proves the decision; this proves the whole path end to end
+          with a real, Guard-gated transaction on BNB testnet. */}
+      <section className="mt-12">
+        <p className="text-sm font-medium text-primary">Live execution</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Run a real Guard-gated transaction</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          The dry-run shows what Guard would decide. This does it for real: an ERC-8183 agent job on
+          BNB testnet, authorized by Guard and signed in your wallet.
+        </p>
+        <div className="mt-5"><TestnetWalletGuard /></div>
+      </section>
     </div>
   )
 }
