@@ -1,41 +1,104 @@
+/**
+ * Local development seed.
+ *
+ * These are catalog entries for local development only. They carry NO fabricated
+ * performance data — no invented success rates, run counts, or scores. They are
+ * inserted as unevaluated, and the real evaluation pipeline scores them from the
+ * same evidence it uses for registry-sourced agents. A locally-seeded agent with no
+ * on-chain identity legitimately scores lower than an ERC-8004 registered one; that
+ * difference is the point.
+ *
+ * Run with: pnpm db:seed
+ */
+
 import { PrismaClient } from '@prisma/client'
-import { agents } from '../lib/kymera'
 
 const prisma = new PrismaClient()
 
-const additional = [
-  { id: 'sentinel', name: 'Sentinel Risk', symbol: 'SR', description: 'Surfaces operational and market risks before they become expensive.', category: 'Research', score: 74, verified: true, runs: '1.8k', success: '92.4%', change: '+1.9%', status: 'Live', accent: '#2a9d8f', tags: ['Risk', 'Alerts', 'Monitoring'], creator: 'Sentinel Labs', updated: '6h ago' },
-  { id: 'orbit', name: 'Orbit Router', symbol: 'OR', description: 'Routes multi-step workflows across teams with clear ownership and timing.', category: 'Operations', score: 72, verified: false, runs: '1.4k', success: '94.8%', change: '+2.4%', status: 'Beta', accent: '#577590', tags: ['Routing', 'Teams', 'SLA'], creator: 'Orbit Systems', updated: '8h ago' },
-  { id: 'prism', name: 'Prism Signals', symbol: 'PS', description: 'Condenses fast-moving signals into concise watchlists and briefs.', category: 'Trading', score: 69, verified: true, runs: '980', success: '88.9%', change: '+0.7%', status: 'Live', accent: '#f4a261', tags: ['Signals', 'Watchlists', 'Data'], creator: 'Prism Works', updated: 'Yesterday' },
-  { id: 'canvas', name: 'Canvas Briefs', symbol: 'CB', description: 'Turns scattered notes into polished, structured creative briefs.', category: 'Creative', score: 66, verified: false, runs: '760', success: '89.5%', change: '+3.1%', status: 'Beta', accent: '#e76f51', tags: ['Briefs', 'Copy', 'Creative'], creator: 'Canvas House', updated: '2d ago' },
+/** Clearly a placeholder, and never presented as a real owner in the UI. */
+const DEMO_OWNER = '0x000000000000000000000000000000000000dEaD'
+
+const catalog = [
+  {
+    id: 'demo-atlas',
+    name: 'Atlas Research',
+    description: 'Turns noisy BNB Chain market data into decision-ready research briefs with cited sources.',
+    category: 'Research',
+    capabilities: ['market intel', 'reports', 'sources', 'analytics'],
+    supportedProtocols: ['A2A', 'MCP'],
+  },
+  {
+    id: 'demo-cobalt',
+    name: 'Cobalt Yield',
+    description: 'Monitors PancakeSwap yield opportunities and flags liquidity and risk conditions before capital moves.',
+    category: 'Trading',
+    capabilities: ['yield', 'risk', 'alerts', 'pancakeswap', 'liquidity'],
+    supportedProtocols: ['A2A', 'REST'],
+  },
+  {
+    id: 'demo-meridian',
+    name: 'Meridian Ops',
+    description: 'Keeps recurring on-chain operations moving with dependable task routing and monitoring.',
+    category: 'Operations',
+    capabilities: ['routing', 'automation', 'monitoring', 'sla'],
+    supportedProtocols: ['MCP'],
+  },
+  {
+    id: 'demo-sentinel',
+    name: 'Sentinel Risk',
+    description: 'Reviews Guard permissions and surfaces operational risk before an agent is granted execution rights.',
+    category: 'Security',
+    capabilities: ['security', 'guard', 'permissions', 'audit', 'risk'],
+    supportedProtocols: ['A2A', 'MCP', 'REST'],
+  },
+  {
+    id: 'demo-quanta',
+    name: 'Quanta Scout',
+    description: 'Finds early signals across on-chain activity and public research for BNB Chain markets.',
+    category: 'Analytics',
+    capabilities: ['signals', 'discovery', 'data', 'monitoring'],
+    supportedProtocols: ['REST'],
+  },
 ]
 
-const seedAgents = [...agents, ...additional]
-
 async function main() {
-  for (const agent of seedAgents) {
+  for (const agent of catalog) {
     await prisma.agent.upsert({
       where: { id: agent.id },
-      update: { name: agent.name, description: agent.description, category: agent.category, verified: agent.verified, status: agent.status },
+      update: {
+        name: agent.name,
+        description: agent.description,
+        category: agent.category,
+        capabilities: agent.capabilities,
+        supportedProtocols: agent.supportedProtocols,
+      },
       create: {
         id: agent.id,
         name: agent.name,
         description: agent.description,
         category: agent.category,
-        chain: 'BNB Smart Chain',
-        endpoint: `https://registry.erc8004.info/agents/${agent.id}`,
-        ownerAddress: 'unknown',
-        registrationId: agent.id,
-        capabilities: agent.tags,
-        supportedProtocols: ['ERC-8004', 'JSON-RPC'],
-        price: 0.01,
-        verified: agent.verified,
-        status: agent.status,
-        performance: { create: { successRate: Number(agent.success.replace('%', '')), tasksCompleted: Number(agent.runs.replace('k', '')) * (agent.runs.includes('k') ? 1000 : 1), failedTasks: 0, avgExecutionTime: 1.2, totalVolume: 0, kymeraScore: agent.score, lastEvaluatedAt: new Date() } },
-        capabilityItems: { create: agent.tags.map((name) => ({ name, description: `${name} capability for ${agent.name}` })) },
+        chain: 'BNB Chain',
+        ownerAddress: DEMO_OWNER,
+        capabilities: agent.capabilities,
+        supportedProtocols: agent.supportedProtocols,
+        price: 0,
+        // No ERC-8004 identity, so `verified` stays false and the trust tier stays
+        // INDEXED until the evaluation pipeline says otherwise.
+        verified: false,
+        trustTier: 'INDEXED',
+        evaluationStatus: 'UNEVALUATED',
+        status: 'Live',
+        capabilityItems: { create: agent.capabilities.map((name) => ({ name })) },
       },
     })
   }
+
+  const count = await prisma.agent.count()
+  console.log(`Seeded ${catalog.length} local catalog agents (${count} total).`)
+  console.log('These are unevaluated. Run an evaluation to score them from real evidence:')
+  console.log('  curl -X POST localhost:3000/api/agents/evaluate -H "authorization: Bearer $KYMERA_ADMIN_TOKEN" -d \'{"probe":false}\'')
 }
 
-main().finally(() => prisma.$disconnect())
+main()
+  .catch((error) => { console.error(error); process.exitCode = 1 })
+  .finally(() => prisma.$disconnect())

@@ -1,18 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getHire, verifyHirePayment } from '@/lib/hiring'
+import { NextResponse } from 'next/server'
+import { requireWallet } from '@/lib/auth/require'
+import { HireInputError, getHire, settleHire } from '@/lib/hiring'
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const userAddress = request.nextUrl.searchParams.get('userAddress') || '0xDemoWallet'
-  const hire = await getHire(id, userAddress)
-  return hire ? NextResponse.json(hire) : NextResponse.json({ error: 'Hire not found' }, { status: 404 })
+export const dynamic = 'force-dynamic'
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireWallet()
+  if ('response' in auth) return auth.response
+  const hire = await getHire((await params).id, auth.address)
+  return hire ? NextResponse.json({ hire }) : NextResponse.json({ error: 'Hire not found' }, { status: 404 })
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireWallet()
+  if ('response' in auth) return auth.response
   try {
-    const { id } = await params
-    const body = await request.json().catch(() => ({}))
-    const hire = await verifyHirePayment(id, body.userAddress || '0xDemoWallet')
-    return NextResponse.json({ hire, demo: true })
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to verify hire payment' }, { status: 400 }) }
+    const result = await settleHire((await params).id, auth.address)
+    return NextResponse.json(result)
+  } catch (error) {
+    if (error instanceof HireInputError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.code === 'HIRE_NOT_FOUND' ? 404 : 400 })
+    }
+    return NextResponse.json({ error: 'Unable to settle hire' }, { status: 400 })
+  }
 }
