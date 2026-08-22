@@ -82,7 +82,9 @@ const CATEGORY_RULES: Array<[AgentCategoryName, RegExp]> = [
   ['Security', /security|audit|guard|permission|risk|compliance|threat|exploit|scam|phish|safety/i],
   ['Analytics', /analytic|data|metric|dashboard|index|statistic|chart|insight|onchain analysis/i],
   ['Monitoring', /monitor|alert|watch|track|notify|observ|uptime|surveil/i],
-  ['Research', /research|analysis|analyse|analyze|search|summar|report|intelligence|due diligence/i],
+  // `search` is word-bounded on purpose: unbounded it also matches "research",
+  // "researcher" and similar, which pulled unrelated agents into this bucket.
+  ['Research', /research|analysis|analyse|analyze|\bsearch\b|summar|\breport\b|intelligence|due diligence/i],
   ['Creative', /creative|content|design|write|writing|image|video|media|art|music|meme|social/i],
   ['Operations', /operation|workflow|automation|triage|orchestrat|routing|task|assistant|agent ops|support/i],
 ]

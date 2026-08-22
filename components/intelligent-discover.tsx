@@ -155,9 +155,11 @@ export function IntelligentDiscover({
         </p>
       )}
 
-      {catalogTotal === 0 ? (
-        <div className="mt-8"><CatalogBootstrap /></div>
-      ) : results.length ? (
+      {/* Always available: indexing more of the registry and scoring unscored agents
+          are ongoing marketplace operations, not just an empty-state fallback. */}
+      <div className="mt-6"><CatalogBootstrap compact /></div>
+
+      {catalogTotal === 0 ? null : results.length ? (
         <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {results.map((agent) => (
             <div key={agent.id} className="flex flex-col">

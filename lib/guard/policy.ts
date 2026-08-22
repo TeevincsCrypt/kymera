@@ -52,6 +52,7 @@ export const GUARD_REASONS = {
   AMOUNT_INVALID: 'AMOUNT_INVALID',
   ADDRESS_INVALID: 'ADDRESS_INVALID',
   SIMULATION_REVERTED: 'SIMULATION_REVERTED',
+  TOKEN_NOT_ON_CHAIN: 'TOKEN_NOT_ON_CHAIN',
   GUARD_UNAVAILABLE: 'GUARD_UNAVAILABLE',
 } as const
 
@@ -84,6 +85,7 @@ export const GUARD_REASON_COPY: Record<GuardReason, string> = {
   AMOUNT_INVALID: 'The requested amount is not a valid positive number.',
   ADDRESS_INVALID: 'One of the supplied addresses is malformed.',
   SIMULATION_REVERTED: 'Simulating this transaction on-chain showed it would fail, so Kymera refused to prepare it.',
+  TOKEN_NOT_ON_CHAIN: 'This token does not exist on the network you are executing against. Pool analytics are read from BNB mainnet, while execution is on testnet — the same token has a different address there, so this swap cannot be signed.',
   GUARD_UNAVAILABLE: 'Guard could not complete its checks. No transaction was prepared.',
 }
 

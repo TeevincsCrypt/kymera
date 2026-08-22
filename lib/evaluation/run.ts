@@ -9,10 +9,14 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { probeEndpoint } from './probe'
 import { SCORE_METHOD, evaluateAgent, type EvaluationEvidence, type EvaluationResult } from './score'
+import { evidenceCategory } from '@/lib/erc8004/adapter'
 
 export type RunOptions = { probe?: boolean }
 
-export async function gatherEvidence(agentId: string, options: RunOptions = {}): Promise<{ evidence: EvaluationEvidence; endpointDetail: string } | null> {
+export async function gatherEvidence(
+  agentId: string,
+  options: RunOptions = {},
+): Promise<{ evidence: EvaluationEvidence; endpointDetail: string; category: string } | null> {
   const agent = await prisma.agent.findUnique({
     where: { id: agentId },
     include: { _count: { select: { capabilityItems: true } } },
@@ -34,6 +38,17 @@ export async function gatherEvidence(agentId: string, options: RunOptions = {}):
   }
 
   return {
+    // Recomputed with the current rules so a scoring pass also corrects stale buckets.
+    // The stored category is deliberately NOT passed in: evidenceCategory honours a
+    // declared category first, so including it would echo the stale value back and
+    // re-derive nothing.
+    category: evidenceCategory({
+      name: agent.name,
+      description: agent.description,
+      endpoint: agent.endpoint,
+      capabilities: Array.isArray(agent.capabilities) ? agent.capabilities : [],
+      supportedProtocols: Array.isArray(agent.supportedProtocols) ? agent.supportedProtocols : [],
+    }),
     evidence: {
       erc8004TokenId: agent.erc8004TokenId,
       erc8004RegistryAddress: agent.erc8004RegistryAddress,
@@ -83,6 +98,10 @@ export async function runEvaluation(agentId: string, options: RunOptions = {}): 
         kymeraScore: result.score,
         kymeraEvaluatedAt: new Date(),
         evaluationStatus: result.sufficientEvidence ? 'EVALUATED' : 'INSUFFICIENT_EVIDENCE',
+        // Re-derive the category from current evidence. Agents indexed by an earlier
+        // version of the categoriser are otherwise stuck in whatever bucket it chose,
+        // which is how a catalog ends up looking like it is all one category.
+        category: gathered.category,
         // trustTier is deliberately not written here. It is promoted below with a
         // guarded updateMany so a human-set VETTED tier is never downgraded.
       },

@@ -58,6 +58,26 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
     )
   }
 
+  // Pool analytics are read from BNB mainnet; execution defaults to testnet. The same
+  // token has a different address on each, so signing a mainnet pool's tokens against
+  // testnet always reverts. Say so up front rather than letting the user approve first.
+  const executingOnTestnet = chainId === KYMERA_CHAIN_ID
+  if (executingOnTestnet) {
+    return (
+      <div className="mt-4 rounded-xl border border-[#f1d5c8] bg-[#fff7f2] p-4">
+        <p className="text-xs font-semibold text-[#9d4925]">Not swappable from this pool</p>
+        <p className="mt-1.5 text-[11px] leading-5 text-[#9d4925]/90">
+          These pool metrics are live from BNB <strong>mainnet</strong>, but Kymera executes on <strong>testnet</strong> by default.
+          This token pair does not exist at these addresses on testnet, so Guard would reject the swap.
+        </p>
+        <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+          Use the Guard dry-run to exercise the authorization path, or set{' '}
+          <code className="rounded bg-background px-1">KYMERA_ENABLE_MAINNET=true</code> to execute against the pools shown here — which moves real funds.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="mt-4 rounded-xl border border-border bg-background p-4">
       <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">

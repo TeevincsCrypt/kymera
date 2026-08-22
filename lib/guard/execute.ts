@@ -147,6 +147,30 @@ function buildTransaction(action: GuardAction, input: AuthorizeInput, amountOutM
   }
 }
 
+/**
+ * Returns the addresses among `tokens` that have no deployed bytecode on `chainId`.
+ * An RPC failure returns an empty list: Guard should not block on infrastructure
+ * trouble here, because the simulation step immediately afterwards would catch a
+ * genuinely broken call anyway.
+ */
+async function findTokensMissingOnChain(chainId: number, tokens: Array<string | null | undefined>) {
+  const client = getServerPublicClient(chainId)
+  if (!client) return []
+  const candidates = tokens.map((token) => normalizeAddress(token)).filter((token) => /^0x[a-f0-9]{40}$/.test(token))
+  if (!candidates.length) return []
+  try {
+    const results = await Promise.all(
+      candidates.map(async (token) => {
+        const bytecode = await client.getBytecode({ address: token as Address })
+        return { token, exists: Boolean(bytecode && bytecode !== '0x') }
+      }),
+    )
+    return results.filter((entry) => !entry.exists).map((entry) => entry.token)
+  } catch {
+    return []
+  }
+}
+
 /* ---------------------------------------------------------------- simulation */
 
 /**
@@ -234,6 +258,31 @@ export async function authorizeAction(input: AuthorizeInput): Promise<AuthorizeR
   if (!decision.allowed) {
     await recordRejection(decision, input)
     return denial(decision)
+  }
+
+  // Guard approved the policy checks. Before touching the chain, verify the tokens
+  // actually exist there. Pool analytics come from BNB mainnet's subgraph while
+  // execution is testnet-only by default, so a mainnet token address is simply not a
+  // contract on testnet — which previously surfaced as an opaque
+  // "exactInputSingle reverted" only after the user had already signed an approval.
+  if (action === 'swap' || action === 'approve_token') {
+    const missing = await findTokensMissingOnChain(Number(input.chainId), [input.token, action === 'swap' ? input.tokenOut : null])
+    if (missing.length > 0) {
+      const failed: GuardDecision = {
+        ...decision,
+        allowed: false,
+        reason: GUARD_REASONS.TOKEN_NOT_ON_CHAIN,
+        message: GUARD_REASON_COPY[GUARD_REASONS.TOKEN_NOT_ON_CHAIN],
+        checks: [...decision.checks, {
+          id: 'token_exists',
+          label: 'Token exists on execution chain',
+          status: 'failed',
+          detail: `No contract at ${missing.join(', ')} on chain ${input.chainId}`,
+        }],
+      }
+      await recordRejection(failed, input)
+      return denial(failed)
+    }
   }
 
   // Guard approved. Establish the slippage floor by simulation before preparing a swap.

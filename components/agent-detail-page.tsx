@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { ArrowRight, HelpCircle, Play, ShieldCheck } from 'lucide-react'
 import { GuardSessionDialog } from '@/components/guard-session-dialog'
+import { HireAgentDialog } from '@/components/hire-agent-dialog'
 import { TrustBadge } from '@/components/agent-card'
 import { TRUST_TIER_COPY, type Agent } from '@/lib/kymera'
 
@@ -125,14 +126,24 @@ export function AgentDetailPage({ agent, evaluation }: { agent: Agent | null; ev
         </div>
 
         <div className="h-fit rounded-2xl border border-border bg-card p-6">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Grant access</p>
-          <h3 className="mt-3 text-xl font-semibold">Put {agent.name} to work.</h3>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Put it to work</p>
+          <h3 className="mt-3 text-xl font-semibold">Hire {agent.name}.</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            A Guard session defines exactly what this agent may do on-chain — which contracts, which methods, and how much it can spend. Nothing executes outside those limits.
+            Hiring is read-only: the agent can look at data and produce analysis, nothing more. On-chain execution is a separate grant you make deliberately.
           </p>
 
           <div className="mt-5">
-            <GuardSessionDialog agent={agent} onCreated={(session) => setSessionId(session.id)} />
+            <HireAgentDialog agent={agent} />
+          </div>
+
+          <div className="mt-6 border-t border-border pt-5">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Step 2 · optional</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              To let this agent request transactions, grant a Guard session. It defines exactly which contracts and methods it may touch and how much it can spend.
+            </p>
+            <div className="mt-4">
+              <GuardSessionDialog agent={agent} onCreated={(session) => setSessionId(session.id)} />
+            </div>
           </div>
 
           {sessionId && (

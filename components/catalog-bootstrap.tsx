@@ -31,20 +31,53 @@ type SyncResult = {
  * it means the database is unreachable or the registry has not been indexed yet, and
  * the user needs to be told which.
  */
+type ScoreState = { total: number; unevaluated: number; evaluated: number }
+
 export function CatalogBootstrap({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
   const [health, setHealth] = useState<Health | null>(null)
   const [result, setResult] = useState<SyncResult | null>(null)
   const [running, setRunning] = useState(false)
+  const [scores, setScores] = useState<ScoreState | null>(null)
+  const [scoring, setScoring] = useState(false)
+  const [scoreNote, setScoreNote] = useState('')
 
   const loadHealth = useCallback(() => {
     fetch('/api/agents/sync', { cache: 'no-store' })
       .then((response) => response.json())
       .then(setHealth)
       .catch(() => setHealth(null))
+    fetch('/api/agents/evaluate', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then(setScores)
+      .catch(() => setScores(null))
   }, [])
 
   useEffect(() => { loadHealth() }, [loadHealth])
+
+  async function scoreAgents() {
+    setScoring(true); setScoreNote('')
+    try {
+      const response = await fetch('/api/agents/evaluate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ limit: 200, onlyUnevaluated: true }),
+      })
+      const payload = await response.json() as { summary?: { evaluated: number; insufficient: number; failed: number }; remaining?: number; error?: string }
+      if (!response.ok) { setScoreNote(payload.error || 'Scoring failed.'); return }
+      const s = payload.summary
+      setScoreNote(
+        `Scored ${s?.evaluated ?? 0}, ${s?.insufficient ?? 0} had too little evidence` +
+        `${s?.failed ? `, ${s.failed} failed` : ''}. ${payload.remaining ?? 0} still unscored.`,
+      )
+      loadHealth()
+      router.refresh()
+    } catch {
+      setScoreNote('Could not reach the evaluation endpoint.')
+    } finally {
+      setScoring(false)
+    }
+  }
 
   async function sync(pages: number) {
     setRunning(true); setResult(null)
@@ -98,8 +131,29 @@ export function CatalogBootstrap({ compact = false }: { compact?: boolean }) {
                 {running ? 'Indexing…' : 'Index agents'}
               </button>
               <button type="button" onClick={() => sync(50)} disabled={running} className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium disabled:opacity-50">
-                Deep index (up to 5,000)
+                Deep index (5,000)
               </button>
+              <button type="button" onClick={() => sync(500)} disabled={running} className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium disabled:opacity-50">
+                Full index (50,000)
+              </button>
+            </div>
+          )}
+
+          {/* Agents imported before scoring existed stay "Not evaluated" until this runs,
+              which is also why Arena reports their Kymera Score as excluded. */}
+          {!dbDown && scores !== null && scores.unevaluated > 0 && (
+            <div className="mt-4 rounded-xl border border-border bg-muted/40 p-3">
+              <p className="text-xs font-medium">
+                {scores.unevaluated.toLocaleString()} of {scores.total.toLocaleString()} agents have no Kymera Score yet
+              </p>
+              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                Scoring reads evidence Kymera already stores — identity, metadata, capabilities. It makes no outbound requests.
+              </p>
+              <button type="button" onClick={scoreAgents} disabled={scoring} className="mt-2.5 inline-flex items-center gap-2 rounded-lg bg-foreground px-3 py-2 text-xs font-semibold text-background disabled:opacity-50">
+                {scoring ? <Loader2 size={12} className="animate-spin" aria-hidden /> : null}
+                {scoring ? 'Scoring…' : `Score ${Math.min(scores.unevaluated, 200).toLocaleString()} agents`}
+              </button>
+              {scoreNote && <p className="mt-2 text-[11px] leading-5 text-muted-foreground">{scoreNote}</p>}
             </div>
           )}
 
