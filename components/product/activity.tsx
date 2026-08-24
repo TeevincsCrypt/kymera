@@ -4,11 +4,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { ActivityItem, Empty, PageHeader, RequireWallet, type ActivityRow, type Summary } from '@/components/product/shared'
 
+/**
+ * Filters map one-to-one onto settlement states. A row belongs to exactly one of them,
+ * so a real transaction can never be counted as an authorization that never happened.
+ */
 const FILTERS = [
-  { id: 'all', label: 'Everything' },
-  { id: 'approved', label: 'Authorized' },
-  { id: 'blocked', label: 'Blocked' },
-  { id: 'confirmed', label: 'On-chain' },
+  { id: 'all', label: 'Everything', settlement: null },
+  { id: 'onchain', label: 'On chain', settlement: 'ON_CHAIN' },
+  { id: 'blocked', label: 'Blocked', settlement: 'BLOCKED' },
+  { id: 'awaiting', label: 'Awaiting signature', settlement: 'AWAITING_SIGNATURE' },
+  { id: 'unsettled', label: 'Not settled', settlement: 'NOT_SETTLED' },
 ] as const
 
 /** The audit trail: every Guard decision made for this wallet, blocks included. */
@@ -20,6 +25,10 @@ export function ActivityPage() {
         title="Everything your agents have done."
         description="Approved and blocked alike, with the exact rule that decided each one. This is the record — nothing an agent requests is hidden from it."
       />
+      <p className="mt-6 rounded-xl border border-border bg-muted/40 px-4 py-3 text-xs leading-5 text-muted-foreground">
+        Every row here is a real request against real limits. Guard dry-runs are simulations and are deliberately
+        never recorded — they reserve nothing and decide nothing, so they cannot appear in an audit trail.
+      </p>
       <div className="mt-10"><RequireWallet title="Your activity"><Body /></RequireWallet></div>
     </div>
   )
@@ -42,12 +51,10 @@ function Body() {
       .finally(() => setLoading(false))
   }, [])
 
-  const visible = useMemo(() => rows.filter((row) => {
-    if (filter === 'approved') return row.decision === 'APPROVED'
-    if (filter === 'blocked') return row.decision === 'REJECTED'
-    if (filter === 'confirmed') return row.status === 'CONFIRMED'
-    return true
-  }), [rows, filter])
+  const visible = useMemo(() => {
+    const target = FILTERS.find((item) => item.id === filter)?.settlement
+    return target ? rows.filter((row) => row.settlement === target) : rows
+  }, [rows, filter])
 
   // Grouping by day makes an audit trail scannable rather than an undifferentiated list.
   const grouped = useMemo(() => {
@@ -66,10 +73,7 @@ function Body() {
     <div>
       <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((item) => {
-          const count = item.id === 'all' ? rows.length
-            : item.id === 'approved' ? rows.filter((row) => row.decision === 'APPROVED').length
-            : item.id === 'blocked' ? rows.filter((row) => row.decision === 'REJECTED').length
-            : rows.filter((row) => row.status === 'CONFIRMED').length
+          const count = item.settlement ? rows.filter((row) => row.settlement === item.settlement).length : rows.length
           return (
             <button
               key={item.id}
@@ -98,7 +102,7 @@ function Body() {
           </div>
         ) : (
           <Empty
-            title={rows.length ? `No ${filter} activity` : 'No activity yet'}
+            title={rows.length ? `Nothing in ${FILTERS.find((item) => item.id === filter)?.label.toLowerCase()}` : 'No activity yet'}
             body={rows.length ? 'Try another filter.' : 'Once an agent requests an action, every Guard decision is recorded here — including the ones it refuses.'}
           />
         )}

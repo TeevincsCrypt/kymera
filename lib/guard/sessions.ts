@@ -150,3 +150,102 @@ export async function getGuardSession(id: string, userAddress: string) {
   const spent = session.spendingLimit ? await spentForSession(session.id, 'BNB') : null
   return { ...withDerivedStatus(session), nativeSpent: spent ? spent.toString() : null }
 }
+
+/**
+ * Pause a session without ending it. Guard treats anything that is not `Active` as
+ * inactive, so a paused session refuses every request exactly as a revoked one does.
+ *
+ * Outstanding authorizations are cancelled as well. A pause that left already-approved
+ * transactions signable would be a pause in name only.
+ */
+export async function pauseGuardSession(id: string, actorAddress: string, paused: boolean) {
+  const actor = normalizeAddress(actorAddress)
+  const session = await prisma.agentSession.findUnique({ where: { id }, select: { id: true, userAddress: true, status: true, expiresAt: true } })
+  if (!session) throw new GuardInputError('Session not found', 'SESSION_NOT_FOUND')
+  if (normalizeAddress(session.userAddress) !== actor) throw new GuardInputError('This session belongs to a different wallet', 'WRONG_WALLET')
+  if (session.status === 'Revoked') throw new GuardInputError('This session was revoked and cannot be resumed', 'SESSION_REVOKED')
+  if (!paused && session.expiresAt.getTime() <= Date.now()) throw new GuardInputError('This session has expired and cannot be resumed', 'SESSION_EXPIRED')
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.agentSession.update({ where: { id }, data: { status: paused ? 'Paused' : 'Active' } })
+    if (paused) {
+      await tx.guardExecution.updateMany({
+        where: { sessionId: id, status: 'AUTHORIZED' },
+        data: { status: 'CANCELLED', error: 'SESSION_PAUSED' },
+      })
+    }
+    await tx.agentAuditLog.create({
+      data: {
+        id: randomUUID(),
+        sessionId: id,
+        action: paused ? 'SESSION_PAUSED' : 'SESSION_RESUMED',
+        actorAddress: actor,
+        details: {} as unknown as Prisma.InputJsonValue,
+      },
+    })
+    return updated
+  })
+}
+
+/**
+ * Narrow a live session: drop permissions, or lower the spending cap.
+ *
+ * Widening is deliberately impossible. A delegation the user already granted — and, for
+ * an Altana session, already signed on-chain — cannot be quietly given more authority
+ * from a web form; that would make the on-chain grant a lie about what the key can do.
+ * To grant more, revoke and grant a new session.
+ */
+export async function narrowGuardSession(
+  id: string,
+  actorAddress: string,
+  input: { permissions?: string[]; spendingLimit?: number | null },
+) {
+  const actor = normalizeAddress(actorAddress)
+  const session = await prisma.agentSession.findUnique({ where: { id }, include: { permissions: true } })
+  if (!session) throw new GuardInputError('Session not found', 'SESSION_NOT_FOUND')
+  if (normalizeAddress(session.userAddress) !== actor) throw new GuardInputError('This session belongs to a different wallet', 'WRONG_WALLET')
+  if (session.status === 'Revoked') throw new GuardInputError('This session was revoked', 'SESSION_REVOKED')
+
+  const current = new Set(session.permissions.filter((entry) => entry.allowed).map((entry) => entry.permission))
+  const data: Prisma.AgentSessionUpdateInput = {}
+  let removed: string[] = []
+
+  if (input.permissions) {
+    const requested = new Set(input.permissions)
+    const added = [...requested].filter((permission) => !current.has(permission))
+    if (added.length) throw new GuardInputError(`Permissions can only be removed here. Revoke and grant a new session to add ${added.join(', ')}.`, 'PERMISSION_WIDENING_BLOCKED')
+    removed = [...current].filter((permission) => !requested.has(permission))
+  }
+
+  if (input.spendingLimit !== undefined) {
+    const currentLimit = session.spendingLimit === null ? null : Number(session.spendingLimit)
+    if (input.spendingLimit === null) {
+      // Removing the limit entirely refuses every value-bearing action — a narrowing.
+      data.spendingLimit = null
+    } else {
+      if (!Number.isFinite(input.spendingLimit) || input.spendingLimit < 0) throw new GuardInputError('Invalid spending limit', 'INVALID_SPENDING_LIMIT')
+      if (currentLimit !== null && input.spendingLimit > currentLimit) {
+        throw new GuardInputError('A spending limit can only be lowered here. Revoke and grant a new session to raise it.', 'LIMIT_WIDENING_BLOCKED')
+      }
+      if (currentLimit === null) throw new GuardInputError('This session has no spending limit to lower. Revoke and grant a new session to set one.', 'LIMIT_WIDENING_BLOCKED')
+      data.spendingLimit = new Prisma.Decimal(input.spendingLimit)
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (removed.length) {
+      await tx.agentPermission.updateMany({ where: { sessionId: id, permission: { in: removed } }, data: { allowed: false } })
+    }
+    const updated = await tx.agentSession.update({ where: { id }, data, include: { permissions: true } })
+    await tx.agentAuditLog.create({
+      data: {
+        id: randomUUID(),
+        sessionId: id,
+        action: 'SESSION_NARROWED',
+        actorAddress: actor,
+        details: { removedPermissions: removed, spendingLimit: input.spendingLimit ?? null } as unknown as Prisma.InputJsonValue,
+      },
+    })
+    return updated
+  })
+}

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireWallet } from '@/lib/auth/require'
 import { allowedChainIds, mainnetEnabled } from '@/lib/guard/policy'
+import { buildAltanaPermissions } from '@/lib/altana/permissions'
+import { settlementOf } from '@/lib/guard/settlement'
 import { expireStaleReservations, spentForSession } from '@/lib/guard/evaluate'
 
 export const dynamic = 'force-dynamic'
@@ -135,18 +137,37 @@ export async function GET() {
       paymentChainId: hire.paymentChainId,
       createdAt: hire.createdAt,
     })),
-    sessions: sessions.map((session) => ({
-      id: session.id,
-      agentId: session.agent.id,
-      agentName: session.agent.name,
-      status: session.status === 'Active' && session.expiresAt <= now ? 'Expired' : session.status,
-      chainId: session.chainId,
-      spendingLimit: session.spendingLimit ? session.spendingLimit.toString() : null,
-      expiresAt: session.expiresAt,
-      createdAt: session.createdAt,
-      permissions: session.permissions.filter((item) => item.allowed).map((item) => item.permission),
-    })),
+    sessions: sessions.map((session) => {
+      const permissions = session.permissions.filter((item) => item.allowed).map((item) => item.permission)
+      // The same derivation the on-chain grant uses, so the page shows the actual scope
+      // rather than a separately maintained description of it.
+      const scope = buildAltanaPermissions({
+        chainId: session.chainId,
+        permissions,
+        spendingLimit: session.spendingLimit == null ? null : Number(session.spendingLimit),
+        expiresAt: session.expiresAt,
+      })
+      return {
+        id: session.id,
+        agentId: session.agent.id,
+        agentName: session.agent.name,
+        status: session.status === 'Active' && session.expiresAt <= now ? 'Expired' : session.status,
+        chainId: session.chainId,
+        spendingLimit: session.spendingLimit ? session.spendingLimit.toString() : null,
+        expiresAt: session.expiresAt,
+        createdAt: session.createdAt,
+        permissions,
+        protocols: scope.protocols,
+        methods: scope.methods,
+        provider: session.provider,
+        agentWallet: session.provider === 'ALTANA' ? session.walletAddress : null,
+        sessionKey: session.provider === 'ALTANA' ? session.providerSessionId : null,
+        grantTxHash: session.grantTxHash,
+        verificationUrl: session.verificationUrl,
+      }
+    }),
     activity: executions.map((execution) => ({
+      ...settlementOf(execution),
       id: execution.id,
       agentId: execution.agent?.id ?? null,
       agentName: execution.agent?.name ?? null,

@@ -73,10 +73,24 @@ async function rpc(method: string, params: unknown[]) {
  * of these — a registry-supplied category that does not map here is normalised rather
  * than passed through, otherwise the agent becomes unreachable behind every filter.
  */
-export const AGENT_CATEGORIES = ['Trading', 'DeFi', 'Research', 'Analytics', 'Monitoring', 'Security', 'Operations', 'Creative'] as const
+export const AGENT_CATEGORIES = [
+  // The four strategy categories Kymera treats as first-class. They are listed before
+  // the broad ones because matching is first-rule-wins: "yield optimisation" would
+  // otherwise be swallowed by Trading, and "health factor" by Monitoring.
+  'Rebalancing',
+  'Grid Trading',
+  'Yield Optimisation',
+  'Health Factor Monitoring',
+  'Trading', 'DeFi', 'Research', 'Analytics', 'Monitoring', 'Security', 'Operations', 'Creative',
+] as const
 export type AgentCategoryName = (typeof AGENT_CATEGORIES)[number]
 
 const CATEGORY_RULES: Array<[AgentCategoryName, RegExp]> = [
+  // Specific strategies first — each of these would otherwise match a broader rule below.
+  ['Rebalancing', /rebalanc|re-balanc|portfolio balanc|target weight|allocation drift|drift threshold/i],
+  ['Grid Trading', /grid[\s-]?(trad|bot|strateg|order)|trading grid|\bgrid\b(?=.*\b(trade|order|bot|range)\b)/i],
+  ['Yield Optimisation', /yield optimi[sz]|optimi[sz]e yield|yield farm|yield aggregat|yield strateg|apy optimi[sz]|auto[\s-]?compound/i],
+  ['Health Factor Monitoring', /health factor|liquidation risk|liquidation monitor|collateral rati|\bltv\b|margin call|undercollateral/i],
   ['DeFi', /defi|liquidity|lending|borrow|staking|pool|pancake|amm|vault|farm|dex|swap/i],
   ['Trading', /trade|trading|arbitrage|market maker|portfolio|yield|invest|price|signal|alpha|bot/i],
   ['Security', /security|audit|guard|permission|risk|compliance|threat|exploit|scam|phish|safety/i],

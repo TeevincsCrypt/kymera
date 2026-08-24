@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { AlertTriangle, Info, ShieldAlert, ShieldCheck, Wallet } from 'lucide-react'
+import { AlertTriangle, Bot, Info, PenLine, ShieldAlert, ShieldCheck, Wallet } from 'lucide-react'
+import { SETTLEMENT_COPY, SUBMITTER_COPY, type Settlement, type Submitter } from '@/lib/guard/settlement'
 import { useKymeraSession } from '@/lib/web3/kymera-session'
 
 export type RiskAlert = {
@@ -29,6 +30,9 @@ export type ActivityRow = {
   createdAt: string
   confirmedAt: string | null
   error: string | null
+  /** BLOCKED | AWAITING_SIGNATURE | ON_CHAIN | NOT_SETTLED — never blended together. */
+  settlement: Settlement
+  submittedBy: Submitter
 }
 
 export type SessionRow = {
@@ -41,6 +45,17 @@ export type SessionRow = {
   expiresAt: string
   createdAt: string
   permissions: string[]
+  /** Protocol labels this session may touch, derived from Guard's own allowlist. */
+  protocols: string[]
+  /** "Protocol · method" entries the on-chain delegation permits. */
+  methods: string[]
+  provider: string
+  /** The Altana smart agentic wallet acting for this session, when delegated. */
+  agentWallet: string | null
+  /** The on-chain session key, identifier for revocation. */
+  sessionKey: string | null
+  grantTxHash: string | null
+  verificationUrl: string | null
 }
 
 export type HiredAgent = {
@@ -179,44 +194,75 @@ export function AlertList({ alerts }: { alerts: RiskAlert[] }) {
   )
 }
 
-const STATUS_TONE: Record<string, string> = {
-  CONFIRMED: 'bg-[#e8f6f0] text-[#138a61]',
-  SUBMITTED: 'bg-secondary text-secondary-foreground',
-  AUTHORIZED: 'bg-secondary text-secondary-foreground',
-  REJECTED: 'bg-destructive/10 text-destructive',
-  FAILED: 'bg-destructive/10 text-destructive',
-  CANCELLED: 'bg-muted text-muted-foreground',
-  EXPIRED: 'bg-muted text-muted-foreground',
-  LEGACY: 'bg-muted text-muted-foreground',
+/**
+ * One visual language per settlement state. These are kept deliberately far apart —
+ * a refusal and a real on-chain transaction should never be mistakable for each other
+ * at a glance, which is the whole point of the audit trail.
+ */
+const SETTLEMENT_STYLE: Record<Settlement, { wrap: string; chip: string; text: string; Icon: typeof ShieldCheck }> = {
+  BLOCKED: {
+    wrap: 'border-destructive/30 bg-destructive/[0.03]',
+    chip: 'bg-destructive/10 text-destructive',
+    text: 'text-destructive',
+    Icon: ShieldAlert,
+  },
+  ON_CHAIN: {
+    wrap: 'border-[#138a61]/30 bg-[#138a61]/[0.03]',
+    chip: 'bg-[#e8f6f0] text-[#138a61]',
+    text: 'text-[#138a61]',
+    Icon: ShieldCheck,
+  },
+  AWAITING_SIGNATURE: {
+    wrap: 'border-border bg-card',
+    chip: 'bg-secondary text-secondary-foreground',
+    text: 'text-muted-foreground',
+    Icon: PenLine,
+  },
+  NOT_SETTLED: {
+    wrap: 'border-border bg-muted/30',
+    chip: 'bg-muted text-muted-foreground',
+    text: 'text-muted-foreground',
+    Icon: Info,
+  },
 }
 
 /** One row of the audit trail — the same shape everywhere it appears. */
 export function ActivityItem({ row }: { row: ActivityRow }) {
-  const blocked = row.decision === 'REJECTED'
+  const style = SETTLEMENT_STYLE[row.settlement] ?? SETTLEMENT_STYLE.NOT_SETTLED
+  const copy = SETTLEMENT_COPY[row.settlement]
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-card p-4">
+    <div className={`flex flex-wrap items-start justify-between gap-3 rounded-xl border p-4 ${style.wrap}`}>
       <div className="flex min-w-0 gap-3">
-        {blocked
-          ? <ShieldAlert size={16} className="mt-0.5 shrink-0 text-destructive" aria-hidden />
-          : <ShieldCheck size={16} className="mt-0.5 shrink-0 text-[#138a61]" aria-hidden />}
+        <style.Icon size={16} className={`mt-0.5 shrink-0 ${style.text}`} aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium">
             {row.agentName ?? 'Agent'} · <span className="font-mono text-xs">{row.action.replaceAll('_', ' ')}</span>
           </p>
-          <p className={`mt-1 font-mono text-[11px] ${blocked ? 'text-destructive' : 'text-muted-foreground'}`}>{row.reason}</p>
+          <p className={`mt-1 font-mono text-[11px] ${row.settlement === 'BLOCKED' ? 'text-destructive' : 'text-muted-foreground'}`}>{row.reason}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {Number(row.amount) > 0 ? `${row.amount} ${row.asset === 'BNB' ? 'BNB' : `${row.asset.slice(0, 8)}…`} · ` : ''}
             {new Date(row.createdAt).toLocaleString()}
           </p>
-          {row.txHash && (
+          {row.submittedBy && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              {row.submittedBy === 'ALTANA_SESSION' ? <Bot size={12} aria-hidden /> : <Wallet size={12} aria-hidden />}
+              {SUBMITTER_COPY[row.submittedBy]}
+            </p>
+          )}
+          {row.txHash ? (
             <a href={`${explorerFor(row.chainId)}/tx/${row.txHash}`} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-xs text-primary underline underline-offset-2">
               {row.txHash.slice(0, 20)}…
             </a>
+          ) : (
+            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{copy.detail}</p>
           )}
           {row.error && <p className="mt-1 text-xs text-destructive">{row.error}</p>}
         </div>
       </div>
-      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${STATUS_TONE[row.status] ?? 'bg-muted text-muted-foreground'}`}>{row.status}</span>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${style.chip}`}>{copy.label}</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{row.status}</span>
+      </div>
     </div>
   )
 }

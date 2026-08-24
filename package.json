@@ -2,6 +2,7 @@
   "name": "kymera",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && node scripts/db-deploy.mjs && next build",
