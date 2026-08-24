@@ -1,15 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShieldCheck } from 'lucide-react'
+import { Bot, ShieldCheck, Wallet } from 'lucide-react'
 import { useKymeraSession } from '@/lib/web3/kymera-session'
 import { useGuardExecution } from '@/lib/web3/use-guard-execution'
+import { useAltanaExecution } from '@/lib/web3/use-altana-execution'
 import { GuardDecisionPanel } from '@/components/guard-decision'
 import { KYMERA_CHAIN_ID } from '@/lib/web3/config'
 import { BSC_MAINNET_CHAIN_ID } from '@/lib/guard/policy'
 import { useSwitchChain } from 'wagmi'
 
-type Session = { id: string; agent?: { name?: string } | null; status: string; spendingLimit: string | number | null }
+type Session = {
+  id: string
+  agent?: { name?: string } | null
+  status: string
+  spendingLimit: string | number | null
+  provider?: string
+  providerSessionId?: string | null
+}
 
 /**
  * PancakeSwap swap execution.
@@ -23,9 +31,12 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
   const { switchChain } = useSwitchChain()
   const approve = useGuardExecution()
   const swap = useGuardExecution()
+  const agentApprove = useAltanaExecution()
+  const agentSwap = useAltanaExecution()
   const [amount, setAmount] = useState('')
   const [sessions, setSessions] = useState<Session[]>([])
   const [sessionId, setSessionId] = useState('')
+  const [autonomous, setAutonomous] = useState(false)
 
   useEffect(() => {
     if (!session.isAuthenticated) { setSessions([]); return }
@@ -40,8 +51,15 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
   }, [session.isAuthenticated, sessionId])
 
   const valid = /^\d+(\.\d+)?$/.test(amount) && Number(amount) > 0
-  const busy = approve.state === 'authorizing' || approve.state === 'awaiting_signature' || approve.state === 'confirming' || swap.state === 'authorizing' || swap.state === 'awaiting_signature' || swap.state === 'confirming'
+  const inFlight = (state: string) => state === 'authorizing' || state === 'awaiting_signature' || state === 'confirming'
+  const busy = [approve.state, swap.state, agentApprove.state, agentSwap.state].some(inFlight)
   const chainId = session.chainId ?? KYMERA_CHAIN_ID
+
+  const selected = sessions.find((item) => item.id === sessionId)
+  const delegated = selected?.provider === 'ALTANA' && Boolean(selected.providerSessionId)
+  // An undelegated session has no agent wallet to submit from, so the choice is not
+  // offered rather than presented and then failing.
+  const agentExecutes = autonomous && delegated
 
   const request = {
     chainId,
@@ -88,6 +106,8 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
     )
   }
 
+  const explorerBase = chainId === BSC_MAINNET_CHAIN_ID ? 'https://bscscan.com' : 'https://testnet.bscscan.com'
+
   return (
     <div className="mt-4 rounded-xl border border-border bg-background p-4">
       <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -111,6 +131,13 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
         </label>
       )}
 
+      {delegated && (
+        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Who submits the transaction">
+          <ModeButton active={!agentExecutes} onClick={() => setAutonomous(false)} icon={<Wallet size={12} aria-hidden />} label="I sign it" />
+          <ModeButton active={agentExecutes} onClick={() => setAutonomous(true)} icon={<Bot size={12} aria-hidden />} label="Agent executes" />
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap gap-2">
         <input
           value={amount}
@@ -123,7 +150,7 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
         <button
           type="button"
           disabled={!valid || busy || !sessionId}
-          onClick={() => approve.authorizeAndSign({ action: 'approve_token', ...request })}
+          onClick={() => agentExecutes ? agentApprove.execute({ action: 'approve_token', ...request }) : approve.authorizeAndSign({ action: 'approve_token', ...request })}
           className="rounded-lg border border-border px-3 py-2 text-sm font-medium disabled:opacity-50"
         >
           1. Approve
@@ -131,7 +158,7 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
         <button
           type="button"
           disabled={!valid || busy || !sessionId}
-          onClick={() => swap.authorizeAndSign({ action: 'swap', ...request })}
+          onClick={() => agentExecutes ? agentSwap.execute({ action: 'swap', ...request }) : swap.authorizeAndSign({ action: 'swap', ...request })}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
         >
           2. Request swap
@@ -139,11 +166,37 @@ export function PancakeActionPanel({ tokenIn, tokenOut, feeTier }: { tokenIn: st
       </div>
 
       <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-        Guard checks the contract, method, session, and spending limit before your wallet is ever opened. A blocked request produces no wallet prompt.
+        {agentExecutes
+          ? 'Guard authorizes first, then the agent wallet submits it with its session key. Your wallet is not a signer here — the agent\u2019s allowlist and spend cap are enforced by its account contract on-chain.'
+          : 'Guard checks the contract, method, session, and spending limit before your wallet is ever opened. A blocked request produces no wallet prompt.'}
       </p>
 
-      <GuardDecisionPanel decision={approve.decision} state={approve.state} txHash={approve.txHash} error={approve.error} />
-      <GuardDecisionPanel decision={swap.decision} state={swap.state} txHash={swap.txHash} error={swap.error} />
+      {agentExecutes ? (
+        <>
+          <GuardDecisionPanel decision={agentApprove.decision} state={agentApprove.state} txHash={agentApprove.txHash} error={agentApprove.error} explorerBase={explorerBase} />
+          <GuardDecisionPanel decision={agentSwap.decision} state={agentSwap.state} txHash={agentSwap.txHash} error={agentSwap.error} explorerBase={explorerBase} />
+        </>
+      ) : (
+        <>
+          <GuardDecisionPanel decision={approve.decision} state={approve.state} txHash={approve.txHash} error={approve.error} explorerBase={explorerBase} />
+          <GuardDecisionPanel decision={swap.decision} state={swap.state} txHash={swap.txHash} error={swap.error} explorerBase={explorerBase} />
+        </>
+      )}
     </div>
+  )
+}
+
+function ModeButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
+        active ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'
+      }`}
+    >
+      {icon}{label}
+    </button>
   )
 }

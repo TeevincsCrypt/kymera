@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { AlertTriangle, ShieldCheck } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, Bot, ShieldCheck } from 'lucide-react'
 import { useKymeraSession } from '@/lib/web3/kymera-session'
 import { KYMERA_CHAIN_ID } from '@/lib/web3/config'
 import type { Agent } from '@/lib/kymera'
@@ -22,6 +22,16 @@ export function GuardSessionDialog({ agent, onCreated }: { agent: Agent; onCreat
   const [permissions, setPermissions] = useState<string[]>(['read_market_data', 'analyze_positions'])
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  const [altana, setAltana] = useState<{ available: boolean; message: string | null; network: string } | null>(null)
+  const [autonomous, setAutonomous] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    fetch('/api/altana/status', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then(setAltana)
+      .catch(() => setAltana(null))
+  }, [open])
 
   const toggle = (permission: string) =>
     setPermissions((current) => (current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission]))
@@ -44,6 +54,23 @@ export function GuardSessionDialog({ agent, onCreated }: { agent: Agent; onCreat
       })
       const payload = await response.json()
       if (!response.ok) { setStatus(payload.error || 'Unable to create session'); return }
+
+      // The session exists and is usable either way. Activating an agent wallet is an
+      // upgrade on top of it, so a failure here is reported without discarding the grant.
+      if (autonomous && altana?.available) {
+        const activation = await fetch(`/api/altana/session/${payload.session.id}`, { method: 'POST' })
+        const result = await activation.json().catch(() => ({}))
+        if (!activation.ok) {
+          setStatus(`Guard session active, but the agent wallet could not be activated: ${result.error ?? 'unknown error'} You can retry from Permissions.`)
+          onCreated?.(payload.session)
+          return
+        }
+        setStatus('Guard session active and delegated on-chain to an agent wallet.')
+        onCreated?.(payload.session)
+        setTimeout(() => setOpen(false), 1400)
+        return
+      }
+
       setStatus('Guard session active.')
       onCreated?.(payload.session)
       setTimeout(() => setOpen(false), 900)
@@ -139,8 +166,31 @@ export function GuardSessionDialog({ agent, onCreated }: { agent: Agent; onCreat
                 </p>
               )}
 
+              {grantsOnchain && altana && (
+                altana.available ? (
+                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border p-3">
+                    <input type="checkbox" checked={autonomous} onChange={(event) => setAutonomous(event.target.checked)} className="mt-0.5" />
+                    <span>
+                      <span className="flex items-center gap-1.5 text-sm font-medium"><Bot size={13} aria-hidden /> Let this agent act on its own</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                        Creates an Altana agent wallet on {altana.network} and delegates a session key to it, so the agent can execute
+                        within these exact limits without a prompt each time. The allowlist and spending limit above are written into
+                        that delegation and enforced by its account contract on-chain. Your own wallet is never a signer, and revoking
+                        this session kills the key.
+                      </span>
+                    </span>
+                  </label>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground">
+                    Autonomous execution is unavailable on this deployment, so this agent will ask you to sign each action.
+                    {altana.message ? ` ${altana.message}` : ''}
+                  </p>
+                )
+              )}
+
               <p className="rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
-                Moving funds out of your wallet is never grantable. Kymera has no custody and cannot sign anything on your behalf.
+                Moving funds out of your wallet is never grantable, and nothing here lets Kymera sign from your wallet. An agent
+                wallet, if you activate one, holds only what you send it and can only make the calls listed above.
               </p>
             </div>
 
