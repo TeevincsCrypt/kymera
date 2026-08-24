@@ -228,7 +228,7 @@ export function contractRuleFor(chainId: number, address: string): ContractRule 
 }
 
 export function allowlistedContracts(chainId: number) {
-  return (CONTRACT_ALLOWLIST[chainId] || []).map((rule) => ({ address: rule.address, label: rule.label, methods: rule.methods }))
+  return (CONTRACT_ALLOWLIST[chainId] || []).map((rule) => ({ address: rule.address, label: rule.label, methods: rule.methods, actions: rule.actions }))
 }
 
 /**

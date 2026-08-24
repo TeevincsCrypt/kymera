@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { Activity, Compass, LayoutDashboard, Menu, Network, ShieldCheck, Sparkles, Users, Wallet, X } from 'lucide-react'
+import { Activity, CandlestickChart, Compass, LayoutDashboard, Menu, Network, ShieldCheck, Sparkles, Users, Wallet, X } from 'lucide-react'
 import { WalletChooser, useKymeraSession } from '@/lib/web3/kymera-session'
 import { KYMERA_CHAIN_ID } from '@/lib/web3/config'
 
@@ -15,6 +15,7 @@ const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/discover', label: 'Discover', icon: Compass },
   { href: '/agents', label: 'My Agents', icon: Users },
+  { href: '/pancakeswap', label: 'Markets', icon: CandlestickChart },
   { href: '/activity', label: 'Activity', icon: Activity },
   { href: '/permissions', label: 'Permissions', icon: ShieldCheck },
 ]
