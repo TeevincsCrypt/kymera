@@ -174,9 +174,9 @@ export function GuardSessionDialog({ agent, onCreated }: { agent: Agent; onCreat
                       <span className="flex items-center gap-1.5 text-sm font-medium"><Bot size={13} aria-hidden /> Let this agent act on its own</span>
                       <span className="mt-1 block text-xs leading-5 text-muted-foreground">
                         Creates an Altana agent wallet on {altana.network} and delegates a session key to it, so the agent can execute
-                        within these exact limits without a prompt each time. The allowlist and spending limit above are written into
-                        that delegation and enforced by its account contract on-chain. Your own wallet is never a signer, and revoking
-                        this session kills the key.
+                        within these exact limits without a prompt each time. The contracts it may call and this spending limit are
+                        written into that delegation and enforced by its account contract on-chain. Your own wallet is never a signer,
+                        the agent wallet holds only what you send it, and revoking this session kills the key.
                       </span>
                     </span>
                   </label>

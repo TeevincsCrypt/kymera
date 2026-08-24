@@ -36,6 +36,17 @@ describe('Altana session permissions', () => {
     assert.deepEqual([...new Set(targets)], [normalizeAddress(PANCAKE_V3_ROUTER[97])])
   })
 
+  test('the approve permission is signature-scoped, and that limit is documented not hidden', () => {
+    const built = buildAltanaPermissions({ chainId: 97, permissions: ['execute_trades'], spendingLimit: 1, expiresAt: expiry() })
+    const wildcard = (built.permissions.calls ?? []).filter((call) => !('to' in call))
+    // Exactly one signature-only rule, and it is `approve`. An Altana CallPermission
+    // constrains the selector but not its arguments, so on-chain this permits approving
+    // any spender; only Guard restricts that to an allowlisted router. This test exists
+    // so that limitation cannot be silently widened.
+    assert.equal(wildcard.length, 1)
+    assert.match(String((wildcard[0] as { signature: string }).signature), /^approve\(/)
+  })
+
   test('submit_transactions allows the ERC-8183 contract but not the router', () => {
     const built = buildAltanaPermissions({ chainId: 97, permissions: ['submit_transactions'], spendingLimit: null, expiresAt: expiry() })
     const targets = (built.permissions.calls ?? [])

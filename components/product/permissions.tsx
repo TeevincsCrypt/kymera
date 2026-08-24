@@ -118,8 +118,9 @@ function AltanaBanner({ status }: { status: AltanaStatus | null }) {
           <>
             <p className="font-semibold">Agent wallets are available on {status.network}.</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              An activated agent acts from its own Altana smart wallet, not yours. The allowlist and spend cap below are
-              enforced by that wallet&rsquo;s account contract on-chain, so they hold even if Kymera is wrong.
+              An activated agent acts from its own Altana smart wallet, not yours. Which contracts it may call, and how much it
+              may spend, are enforced by that wallet&rsquo;s account contract on-chain — those hold even if Kymera is wrong. Finer
+              limits, like which spender a token approval may name, are enforced by Guard when it builds the call.
               {status.agentWallet && <> Agent wallet <span className="break-all font-mono text-[11px]">{status.agentWallet}</span>.</>}
             </p>
           </>

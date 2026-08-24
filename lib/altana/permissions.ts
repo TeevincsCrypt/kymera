@@ -86,15 +86,22 @@ export function buildAltanaPermissions(input: BuildPermissionsInput): BuiltPermi
     }
   }
 
-  // Swapping an ERC-20 needs an allowance on the router first. Scoped to `approve` on
-  // any token, because the token contract varies per swap — the router it can approve
-  // is what actually bounds this, and that is fixed by the allowlist above.
+  // Swapping an ERC-20 needs an allowance on the router first, and the token contract
+  // varies per swap, so this permission is scoped by function signature rather than by
+  // address.
+  //
+  // Be precise about what that does and does not buy: an Altana CallPermission
+  // constrains the selector, not the arguments, so on-chain this permits `approve` on
+  // any ERC-20 to any spender. The spender restriction — only routers Kymera already
+  // trusts — is enforced by Guard when it builds the calldata, and by nothing below it.
+  // The blast radius is bounded by the agent wallet's own balance either way, since the
+  // user's wallet is not a signer on this path.
   const router = PANCAKE_V3_ROUTER[input.chainId]
   if (router && granted.has('execute_trades')) {
     const signature = SIGNATURES.get('approve')
     if (signature) {
       calls.push({ signature })
-      methods.push('ERC-20 · approve (PancakeSwap router only)')
+      methods.push('ERC-20 · approve (spender allowlisted by Guard, not on-chain)')
     }
   }
 
