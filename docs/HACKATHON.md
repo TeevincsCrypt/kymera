@@ -113,8 +113,9 @@ refuses with `TOKEN_NOT_ON_CHAIN` before the wallet opens.
 | Cross-chain swap refusal | **Verified** — unit tests |
 | Reachable from product navigation | **Verified** — `/pancakeswap` in `NAV` |
 | Live pool data from the V3 subgraph | **Unverified** — needs `THEGRAPH_API_KEY` and gateway access |
-| User-signed swap on BNB | **Unverified** — needs RPC access and a funded wallet |
-| Autonomous swap through an agent wallet | **Unverified** — needs relay access |
+| User-signed swap on BNB **mainnet** | **Unverified** — needs RPC access, real funds, and `KYMERA_ENABLE_MAINNET=true` |
+| Swap on BNB **testnet** | **Not available** — indexed pools are mainnet-only, so their tokens are not contracts on chain 97. Guard refuses with `TOKEN_NOT_ON_CHAIN` rather than letting the call revert. Closing this needs testnet pool data. |
+| Autonomous execution through an agent wallet | **Unverified** — exercised on testnet via ERC-8183, not via a swap (see §E step 5) |
 
 ---
 
@@ -201,8 +202,11 @@ predates the Altana work and does not affect the build.
    constrains a selector, not its parameters, so on-chain the session key may approve any
    spender. Guard restricts the spender to an allowlisted router when it builds the call;
    nothing below Guard does. A test pins this so the surface cannot widen silently.
-3. **Pool metrics come from BNB mainnet.** Those pairs do not exist at the same addresses on
-   testnet. Guard refuses with `TOKEN_NOT_ON_CHAIN` rather than letting a swap revert.
+3. **Pool metrics come from BNB mainnet, so there is no testnet swap path.** Those pairs do
+   not exist at the same addresses on chain 97, and Guard refuses with `TOKEN_NOT_ON_CHAIN`
+   rather than letting a swap revert. Autonomous execution is therefore demonstrated on
+   testnet through ERC-8183, and the PancakeSwap swap path is exercised on mainnet only.
+   Closing this properly means sourcing testnet pool data.
 4. **Mainnet execution is off** unless `KYMERA_ENABLE_MAINNET=true`.
 
 ---
@@ -243,14 +247,21 @@ https://testnet.bnbchain.org/faucet-smart.
 | 2 | Grant a session with **Request swaps**, a small cap, and *Let this agent act on its own* checked | "Guard session active and delegated on-chain to an agent wallet" |
 | 3 | Permissions → **Verify on-chain** | "Confirmed registered in the Altana KeyStore" |
 | 4 | Permissions | Agent wallet address, allowed protocols, methods, spend cap, expiry, grant tx link |
-| 5 | Markets → pick a pool → **Agent executes** → Approve, then Request swap | A real transaction hash |
+| 5 | My Agents → the agent → **Autonomous execution** → *Let the agent run it* | A real transaction hash, **with no wallet prompt** |
 | 6 | Activity | One `ON_CHAIN` row, "Submitted by the agent wallet via its Altana session key", explorer link resolves |
-| 7 | Request an amount **above** the spend cap | Blocked, reason `SPENDING_CAP_EXCEEDED`, **no wallet prompt and no transaction** |
+| 7 | Guard dry-run, or a swap, with an amount **above** the spend cap | Blocked, reason `SPENDING_CAP_EXCEEDED`, **no wallet prompt and no transaction** |
 | 8 | Activity | A `BLOCKED` row, visually distinct from step 6 |
 | 9 | Permissions → **Pause**, then retry step 5 | Blocked, reason `SESSION_INACTIVE` |
-| 10 | Resume, then **Edit permissions** → uncheck Request swaps → Apply | Reduction applies; on-chain grant re-issued |
+| 10 | Resume, then **Edit permissions** → uncheck Submit agent jobs → Apply | Reduction applies; on-chain grant re-issued |
 | 11 | Retry step 5 | Blocked, reason `PERMISSION_NOT_GRANTED` |
 | 12 | **Revoke session** | Revoked on-chain; every subsequent request refused |
+
+**Why step 5 is an ERC-8183 job and not a swap.** The pools Kymera indexes are BNB
+**mainnet** pools. Those token addresses are not contracts on chain 97, so Guard refuses to
+build a swap against them on testnet — correctly, with `TOKEN_NOT_ON_CHAIN`. The ERC-8183
+Agentic Commerce contract *is* deployed on testnet, so it is the action that genuinely
+completes end to end there. A testnet swap would require testnet pool data, and a mainnet
+swap would require `KYMERA_ENABLE_MAINNET=true` and real funds.
 
 Steps 7, 9, and 11 are the ones that matter most. A system that executes correctly is
 ordinary; one that refuses correctly, and shows you exactly which rule refused, is the point.
