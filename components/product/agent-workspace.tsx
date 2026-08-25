@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, Check, Info, Loader2, Minus, ShieldAlert, ShieldCheck, X } from 'lucide-react'
+import { ArrowRight, Bot, Check, ExternalLink, Info, Loader2, Minus, ShieldAlert, ShieldCheck, X } from 'lucide-react'
 import { useKymeraSession } from '@/lib/web3/kymera-session'
 import { useGuardExecution, type GuardCheck } from '@/lib/web3/use-guard-execution'
+import { useAltanaExecution } from '@/lib/web3/use-altana-execution'
 import { RequireWallet, explorerFor, type SessionRow, type Summary } from '@/components/product/shared'
 import { KYMERA_CHAIN_ID } from '@/lib/web3/config'
 import type { Agent } from '@/lib/kymera'
@@ -191,6 +192,8 @@ function Body({ agent }: { agent: Agent }) {
             </>
           )}
         </section>
+
+        {activeGrant && <AutonomousRun agent={agent} grant={activeGrant} chainId={chainId} />}
       </div>
 
       {/* -------------------------------------------------------------- pipeline */}
@@ -308,5 +311,97 @@ function Stage({ title, subtitle, checks }: { title: string; subtitle: string; c
         ))}
       </ul>
     </div>
+  )
+}
+
+/**
+ * Autonomous execution — the agent acting on its own, for real.
+ *
+ * The action here is an ERC-8183 agent job rather than a swap, and that choice is not
+ * cosmetic: the PancakeSwap pools Kymera indexes are BNB mainnet pools, so those token
+ * addresses are not contracts on testnet and Guard correctly refuses to build a swap
+ * against them. The ERC-8183 contract IS deployed on testnet, so this is the action
+ * that can genuinely run end to end there — Guard decides, the agent wallet submits
+ * with its session key, and a real transaction lands on chain.
+ */
+function AutonomousRun({ agent, grant, chainId }: { agent: Agent; grant: SessionRow; chainId: number }) {
+  const run = useAltanaExecution()
+  const [description, setDescription] = useState(`Delegated run for ${agent.name}`)
+
+  const delegated = grant.provider === 'ALTANA' && Boolean(grant.sessionKey)
+  const permitted = grant.permissions.includes('submit_transactions')
+  const busy = run.state === 'authorizing' || run.state === 'confirming'
+
+  if (!delegated) {
+    return (
+      <section className="rounded-2xl border border-dashed border-border bg-card p-6">
+        <p className="flex items-center gap-2 text-sm font-semibold"><Bot size={15} aria-hidden /> Autonomous execution</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          This grant is not delegated to an agent wallet, so every action needs your signature. Activate one from{' '}
+          <Link href="/permissions" className="font-semibold text-primary underline underline-offset-2">Permissions</Link>{' '}
+          to let this agent act on its own, within the same limits.
+        </p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-6">
+      <p className="flex items-center gap-2 text-sm font-semibold"><Bot size={15} aria-hidden /> Autonomous execution</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        The agent submits this itself, from its own wallet, using the session key you delegated on-chain. Your wallet is
+        not a signer — no prompt will open. Guard still decides first, and the agent&rsquo;s account contract enforces the
+        same limits at execution.
+      </p>
+      <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">agent wallet {grant.agentWallet}</p>
+
+      <label className="mt-4 block text-sm font-medium">
+        Job description
+        <input
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          className="mt-1.5 h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-normal"
+        />
+      </label>
+
+      <button
+        type="button"
+        disabled={busy || !permitted}
+        onClick={() => run.execute({ action: 'create_job', chainId, agentId: agent.id, sessionId: grant.id, description })}
+        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+      >
+        {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Bot size={14} aria-hidden />}
+        {busy ? 'Agent is running…' : 'Let the agent run it'}
+      </button>
+
+      {!permitted && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          This grant does not include <code className="rounded bg-muted px-1">Submit agent jobs</code>, so Guard would refuse.
+          Grant a new session with that permission to run this.
+        </p>
+      )}
+
+      {run.decision && (
+        <div className={`mt-4 rounded-xl border p-4 ${run.decision.allowed ? 'border-[#138a61]/30 bg-[#138a61]/[0.04]' : 'border-destructive/30 bg-destructive/5'}`}>
+          <p className={`text-sm font-semibold ${run.decision.allowed ? 'text-[#138a61]' : 'text-destructive'}`}>
+            {run.decision.allowed ? 'Guard authorized it' : 'Guard blocked it'}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{run.decision.message}</p>
+          <p className="mt-2 inline-flex rounded-md bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-wider">{run.decision.reason}</p>
+        </div>
+      )}
+
+      {run.txHash && (
+        <a
+          href={run.explorerUrl ?? `${explorerFor(chainId)}/tx/${run.txHash}`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex items-center gap-1.5 break-all text-xs font-semibold text-primary underline underline-offset-2"
+        >
+          {run.txHash.slice(0, 24)}… <ExternalLink size={11} aria-hidden />
+        </a>
+      )}
+      {run.error && <p className="mt-3 rounded-lg bg-destructive/10 p-3 text-xs leading-5 text-destructive">{run.error}</p>}
+    </section>
   )
 }
