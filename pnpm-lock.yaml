@@ -12,8 +12,8 @@ importers:
   .:
     dependencies:
       '@altananetwork/sdk':
-        specifier: ^0.7.1
-        version: 0.7.1(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(@wagmi/core@3.6.4(@tanstack/query-core@5.101.4)(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(wagmi@3.7.6(@tanstack/query-core@5.101.4)(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(zod@3.25.76)
+        specifier: 0.8.0
+        version: 0.8.0(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(@wagmi/core@3.6.4(@tanstack/query-core@5.101.4)(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(wagmi@3.7.6(@tanstack/query-core@5.101.4)(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(zod@3.25.76)
       '@base-ui/react':
         specifier: ^1.5.0
         version: 1.5.0(@date-fns/tz@1.4.1)(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -97,8 +97,8 @@ packages:
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
 
-  '@altananetwork/sdk@0.7.1':
-    resolution: {integrity: sha512-C1XCliQl4NRiHs5LwNtU2BmjqfB2MZWYR+e31ZmsH8fGs7l0bFiA/w5ufmzWj6LaXUYLQnpt6lI5kIQthNHY4Q==}
+  '@altananetwork/sdk@0.8.0':
+    resolution: {integrity: sha512-OPzLZjba1sqGBqc+D003eZcrPfREW/rAhhq/FN17/0hvWBArGzDU7+bHBd/f/jlq0AoRJl0GpCy7L9PQdHx+dQ==}
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -2634,7 +2634,7 @@ snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
 
-  '@altananetwork/sdk@0.7.1(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(@wagmi/core@3.6.4(@tanstack/query-core@5.101.4)(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(wagmi@3.7.6(@tanstack/query-core@5.101.4)(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(zod@3.25.76)':
+  '@altananetwork/sdk@0.8.0(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(@wagmi/core@3.6.4(@tanstack/query-core@5.101.4)(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(wagmi@3.7.6(@tanstack/query-core@5.101.4)(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(zod@3.25.76)':
     dependencies:
       ox: 0.14.33(typescript@5.7.3)(zod@3.25.76)
       porto: 0.2.37(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(@wagmi/core@3.6.4(@tanstack/query-core@5.101.4)(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))(react@19.2.4)(typescript@5.7.3)(use-sync-external-store@1.4.0(react@19.2.4))(viem@2.55.13(typescript@5.7.3)(zod@3.25.76))(wagmi@3.7.6(@tanstack/query-core@5.101.4)(@tanstack/react-query@5.101.4(react@19.2.4))(@types/react@19.2.14)(react@19.2.4)(typescript@5.7.3)(viem@2.55.13(typescript@5.7.3)(zod@3.25.76)))

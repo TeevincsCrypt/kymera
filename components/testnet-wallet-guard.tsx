@@ -1,54 +1,114 @@
 'use client'
 
-import { useState } from 'react'
-import { usePublicClient, useSwitchChain, useWalletClient } from 'wagmi'
-import { bsc, kymeraChain, getChainStatus } from '@/lib/web3/config'
-import { useWalletConnection, WalletChooser } from '@/lib/web3/use-wallet-connection'
-import { estimateJobTransaction, prepareJobTransaction, submitJobTransaction, waitForJobConfirmation } from '@/lib/erc8183/transactions'
+import { useEffect, useState } from 'react'
+import { ShieldCheck } from 'lucide-react'
+import { useKymeraSession } from '@/lib/web3/kymera-session'
+import { useGuardExecution } from '@/lib/web3/use-guard-execution'
+import { GuardDecisionPanel } from '@/components/guard-decision'
+import { KYMERA_CHAIN_ID } from '@/lib/web3/config'
 
+type Session = { id: string; agent?: { name?: string } | null; status: string }
+
+/**
+ * ERC-8183 agent job creation on BSC testnet.
+ *
+ * This flow previously carried its own preflight endpoint and transaction builder.
+ * It now uses the same canonical Guard as every other execution surface — one
+ * authorization path, one ledger, one audit trail.
+ */
 export function TestnetWalletGuard() {
-  const connection = useWalletConnection()
-  const { address, chainId, isConnected, status: accountStatus, connector: activeConnector, isPending, connectionError, chooserOpen, openWalletChooser, disconnectWallet } = connection
-  const { switchChain, isPending: switching } = useSwitchChain()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient()
-  const [preview, setPreview] = useState<Awaited<ReturnType<typeof estimateJobTransaction>> | null>(null)
-  const [state, setState] = useState('IDLE')
-  const [error, setError] = useState('')
-  const [hash, setHash] = useState('')
-  const status = getChainStatus(chainId)
+  const session = useKymeraSession()
+  const guard = useGuardExecution()
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [sessionId, setSessionId] = useState('')
+  const [description, setDescription] = useState('Kymera testnet agent job')
 
-  async function prepare() {
-    setError(''); setHash('')
-    try {
-      if (!address || !walletClient || !publicClient) throw new Error('WALLET_REQUIRED')
-      if (chainId !== kymeraChain.id) throw new Error(chainId === bsc.id ? 'MAINNET_EXECUTION_DISABLED' : 'WRONG_NETWORK')
-      const tx = prepareJobTransaction({ from: address, provider: address })
-      const response = await fetch('/api/erc8183/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ wallet: address, chainId, to: tx.to, method: tx.method, value: '0' }) })
-      const result = await response.json() as { ok?: boolean; error?: string }
-      if (!response.ok || !result.ok) throw new Error(result.error ?? 'GUARD_REJECTED')
-      setPreview(await estimateJobTransaction(publicClient, tx)); setState('PREVIEW')
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'GUARD_UNAVAILABLE'); setState('BLOCKED') }
-  }
+  useEffect(() => {
+    if (!session.isAuthenticated) { setSessions([]); setSessionId(''); return }
+    fetch('/api/sessions')
+      .then((response) => response.json())
+      .then((payload) => {
+        const active = (payload.sessions || []).filter((item: Session) => item.status === 'Active')
+        setSessions(active)
+        setSessionId((current) => current || active[0]?.id || '')
+      })
+      .catch(() => setSessions([]))
+  }, [session.isAuthenticated])
 
-  async function signAndSubmit() {
-    if (!preview || !walletClient || !publicClient || !address) return
-    try {
-      setState('SUBMITTED'); const transactionHash = await submitJobTransaction(walletClient, preview); setHash(transactionHash)
-      await fetch('/api/erc8183/receipt', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ txHash: transactionHash, chainId: kymeraChain.id, from: address, to: preview.to, value: '0', status: 'SUBMITTED' }) })
-      setState('CONFIRMING'); const receipt = await waitForJobConfirmation(publicClient, transactionHash); const confirmed = receipt.status === 'success'
-      await fetch('/api/erc8183/receipt', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ txHash: transactionHash, chainId: kymeraChain.id, from: address, to: preview.to, value: '0', status: confirmed ? 'CONFIRMED' : 'FAILED', blockNumber: receipt.blockNumber.toString(), gasUsed: receipt.gasUsed.toString(), effectiveGasPrice: receipt.effectiveGasPrice?.toString(), error: confirmed ? undefined : 'TRANSACTION_REVERTED' }) })
-      setState(confirmed ? 'CONFIRMED' : 'FAILED')
-    } catch (cause) { const message = cause instanceof Error ? cause.message : 'TRANSACTION_FAILED'; setError(message.toLowerCase().includes('reject') ? 'USER_REJECTED' : message); setState('FAILED') }
-  }
+  const onKymeraChain = session.chainId === KYMERA_CHAIN_ID
+  const busy = guard.state === 'authorizing' || guard.state === 'awaiting_signature' || guard.state === 'confirming'
 
-  const connected = Boolean(isConnected && address)
-  const walletAddress = address
-  return <section className="border border-stone-200 bg-white p-5 shadow-sm">
-    <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-stone-500">Universal EVM wallet</p><h2 className="mt-2 text-xl font-semibold text-stone-950">Testnet transaction gate</h2><p className="mt-2 max-w-xl text-sm leading-6 text-stone-600">Connect any compatible EVM wallet. Real execution is restricted to BNB Smart Chain Testnet (chain 97).</p></div><span className={`font-mono text-[10px] uppercase tracking-widest ${status.correctNetwork ? 'text-emerald-700' : 'text-amber-700'}`}>{status.correctNetwork ? 'Connected' : connected && chainId === bsc.id ? 'Mainnet disabled' : 'Network locked'}</span></div>
-    <div className="mt-5 flex flex-wrap items-center gap-3">{!connected ? <button type="button" onClick={openWalletChooser} disabled={isPending} className="bg-stone-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{isPending ? 'CONNECTING...' : 'Connect wallet'}</button> : <><span className="border border-stone-200 px-3 py-2 font-mono text-xs text-stone-700">{walletAddress?.slice(0, 6)}…{walletAddress?.slice(-4)}</span>{chainId !== kymeraChain.id && <button type="button" onClick={() => switchChain({ chainId: kymeraChain.id })} disabled={switching} className="border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800">{switching ? 'Switching...' : 'Switch to testnet'}</button>}<button type="button" onClick={prepare} disabled={!status.correctNetwork || state === 'CONFIRMING' || state === 'SUBMITTED'} className="bg-stone-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-40">Run Guard & preview</button><button type="button" onClick={() => { disconnectWallet(); setPreview(null); setHash(''); setState('IDLE') }} className="text-sm text-stone-500 underline">Disconnect wallet</button></>}</div>
-    <WalletChooser connection={connection} />
-    {preview && <div className="mt-5 border border-stone-200 bg-stone-50 p-4 font-mono text-xs text-stone-700"><p>Network: BNB Smart Chain Testnet (97)</p><p>From: {preview.from}</p><p>To: {preview.to}</p><p>Method: createJob(...)</p><p>Value: 0 BNB</p><p>Gas estimate: {preview.estimatedGas?.toString()}</p><p>Guard status: APPROVED</p><button type="button" onClick={signAndSubmit} className="mt-4 bg-emerald-700 px-4 py-2 font-sans text-sm font-medium text-white">Sign in wallet</button></div>}
-    {process.env.NODE_ENV === 'development' && <div className="mt-4 border-t border-dashed border-stone-200 pt-3 font-mono text-[10px] uppercase tracking-wider text-stone-500"><p>Wallet status: {accountStatus}</p><p>Connector: {activeConnector?.name ?? 'none'}</p><p>Selected wallet: {connection.selectedWallet?.name ?? 'none'}</p><p>Account: {address ?? 'none'}</p><p>Chain ID: {chainId ?? 'none'}</p><p>Available injected wallets: {connection.wallets.map((wallet) => wallet.name).join(', ') || 'none'}</p><p>Provider count: {connection.wallets.length}</p><p>Auto reconnect: disabled</p><p>Connection error: {connectionError?.message ?? 'none'}</p></div>}{state !== 'IDLE' && <p className="mt-4 text-sm text-stone-600">State: <strong>{state}</strong></p>}{error && <p className="mt-2 text-sm text-red-700">{error}</p>}{hash && <p className="mt-2 text-sm text-emerald-700">Transaction {state === 'CONFIRMED' ? 'confirmed' : 'submitted'}: <a className="underline" href={`https://testnet.bscscan.com/tx/${hash}`} target="_blank" rel="noreferrer">{hash}</a></p>}
-  </section>
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
+            <ShieldCheck size={12} aria-hidden /> Guard-protected execution
+          </p>
+          <h2 className="mt-2 text-xl font-semibold">ERC-8183 agent job</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+            Creates a real on-chain agent job on BNB Smart Chain Testnet. Guard authorizes the contract, method, session, and value before your wallet opens.
+          </p>
+        </div>
+        <span className={`font-mono text-[10px] uppercase tracking-widest ${onKymeraChain ? 'text-[#138a61]' : 'text-amber-700'}`}>
+          {onKymeraChain ? 'Testnet ready' : 'Wrong network'}
+        </span>
+      </div>
+
+      {!session.isConnected ? (
+        <button type="button" onClick={session.openWalletChooser} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">
+          Connect wallet
+        </button>
+      ) : !session.isAuthenticated ? (
+        <div className="mt-5">
+          <button type="button" onClick={() => void session.signIn()} disabled={session.authPending} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+            {session.authPending ? 'Waiting for signature…' : 'Sign in with wallet'}
+          </button>
+          {session.authError && <p className="mt-2 text-xs text-destructive">{session.authError}</p>}
+        </div>
+      ) : (
+        <>
+          <div className="mt-5 flex flex-wrap items-end gap-3">
+            <span className="rounded-lg border border-border px-3 py-2 font-mono text-xs text-muted-foreground">
+              {session.address?.slice(0, 6)}…{session.address?.slice(-4)}
+            </span>
+            {!onKymeraChain && (
+              <button type="button" onClick={session.switchToKymeraChain} disabled={session.switching} className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800">
+                {session.switching ? 'Switching…' : 'Switch to testnet'}
+              </button>
+            )}
+            <label className="min-w-48 flex-1 text-xs font-medium text-muted-foreground">
+              Guard session
+              <select value={sessionId} onChange={(event) => setSessionId(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-2 text-xs text-foreground">
+                <option value="">Most recent active session</option>
+                {sessions.map((item) => <option key={item.id} value={item.id}>{item.agent?.name || item.id.slice(0, 8)}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <label className="mt-3 block text-xs font-medium text-muted-foreground">
+            Job description
+            <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={200} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
+          </label>
+
+          <button
+            type="button"
+            disabled={busy || !onKymeraChain}
+            onClick={() => guard.authorizeAndSign({ action: 'create_job', chainId: KYMERA_CHAIN_ID, sessionId: sessionId || undefined, description })}
+            className="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? 'Working…' : 'Request Guard authorization'}
+          </button>
+
+          {sessions.length === 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              You have no active Guard session. Grant one with the <code className="rounded bg-muted px-1">submit_transactions</code> permission from an agent profile.
+            </p>
+          )}
+
+          <GuardDecisionPanel decision={guard.decision} state={guard.state} txHash={guard.txHash} error={guard.error} />
+        </>
+      )}
+    </section>
+  )
 }

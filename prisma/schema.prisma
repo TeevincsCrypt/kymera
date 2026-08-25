@@ -8,34 +8,43 @@ datasource db {
 }
 
 model Agent {
-  id                 String              @id @default(cuid())
-  name               String
-  description        String
-  category           String
-  chain              String
-  endpoint           String?
-  ownerAddress       String
-  registrationId     String?
-  capabilities       Json
-  supportedProtocols Json
-  price              Decimal?            @db.Decimal(18, 8)
-  verified           Boolean             @default(false)
-  status             String              @default("Live")
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  performance        AgentPerformance?
-  tasks              AgentTask[]
-  capabilityItems    AgentCapability[]
-  transactions       AgentTransaction[]
-  sessions           AgentSession[]
-  benchmarkResults   BenchmarkResult[]
-  hires             AgentHire[]
-  erc8004ChainId     Int?
+  id                     String            @id @default(cuid())
+  name                   String
+  description            String
+  category               String
+  chain                  String
+  endpoint               String?
+  ownerAddress           String
+  registrationId         String?
+  capabilities           Json
+  supportedProtocols     Json
+  price                  Decimal?          @db.Decimal(18, 8)
+  /// True only when an ERC-8004 identity (registry + token id) was actually read for
+  /// this agent. It means "identity confirmed", never "audited" or "safe".
+  verified               Boolean           @default(false)
+  /// INDEXED = present in the registry. EVALUATED = Kymera has sufficient evidence to
+  /// score it. VETTED = a human review was recorded; never set automatically.
+  trustTier              String            @default("INDEXED")
+  /// Denormalised latest evaluation, so the marketplace can sort and filter cheaply.
+  kymeraScore            Float?
+  kymeraEvaluatedAt      DateTime?
+  evaluationStatus       String            @default("UNEVALUATED")
+  status                 String            @default("Live")
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  performance            AgentPerformance?
+  capabilityItems        AgentCapability[]
+  sessions               AgentSession[]
+  benchmarkResults       BenchmarkResult[]
+  hires                  AgentHire[]
+  guardExecutions        GuardExecution[]
+  evaluations            AgentEvaluation[]
+  erc8004ChainId         Int?
   erc8004RegistryAddress String?
-  erc8004TokenId     String?
-  erc8004MetadataUri String?
-  erc8004MetadataHash String?
-  erc8004LastSyncedAt DateTime?
+  erc8004TokenId         String?
+  erc8004MetadataUri     String?
+  erc8004MetadataHash    String?
+  erc8004LastSyncedAt    DateTime?
   erc8004RawRegistration Json?
 
   @@unique([erc8004ChainId, erc8004RegistryAddress, erc8004TokenId])
@@ -44,108 +53,176 @@ model Agent {
   @@index([status])
   @@index([verified])
   @@index([ownerAddress])
+  @@index([kymeraScore])
+  @@index([trustTier])
 }
 
 model AgentHire {
-  id              String   @id @default(cuid())
-  agentId         String
-  userAddress     String
-  status          String   @default("PENDING_PAYMENT")
-  paymentProvider String
-  paymentId       String?
-  paymentStatus   String   @default("UNPAID")
-  amount          Decimal  @db.Decimal(18, 8)
-  currency        String   @default("USD")
-  task            String
-  benchmarkId     String?
-  sessionId       String?
+  id                   String    @id @default(cuid())
+  agentId              String
+  userAddress          String
+  status               String    @default("PENDING_PAYMENT")
+  paymentProvider      String
+  paymentId            String?
+  paymentStatus        String    @default("UNPAID")
+  amount               Decimal   @db.Decimal(18, 8)
+  currency             String    @default("USD")
+  task                 String
+  benchmarkId          String?
+  sessionId            String?
   requestedPermissions Json
-  blockedActions  Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  paidAt          DateTime?
-  activatedAt     DateTime?
-  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  blockedActions       Json
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  paidAt               DateTime?
+  activatedAt          DateTime?
+  /// On-chain hire payment: the chain, recipient, and transaction that settled it.
+  paymentChainId       Int?
+  paymentTxHash        String?
+  paymentRecipient     String?
+  paymentAmountWei     String?
+  agent                Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([userAddress, status])
   @@index([agentId, createdAt])
 }
 
 model AgentPerformance {
-  id                String   @id @default(cuid())
-  agentId           String   @unique
-  successRate       Float
-  tasksCompleted    Int      @default(0)
-  failedTasks       Int      @default(0)
-  avgExecutionTime  Float
-  totalVolume       Decimal  @default(0) @db.Decimal(18, 8)
-  kymeraScore       Float
-  lastEvaluatedAt   DateTime?
-  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  agentId          String    @unique
+  successRate      Float
+  tasksCompleted   Int       @default(0)
+  failedTasks      Int       @default(0)
+  avgExecutionTime Float
+  totalVolume      Decimal   @default(0) @db.Decimal(18, 8)
+  kymeraScore      Float
+  lastEvaluatedAt  DateTime?
+  agent            Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([kymeraScore])
 }
 
-model AgentTask {
-  id             String   @id @default(cuid())
-  agentId        String
-  task           String
-  status         String
-  result         Json?
-  executionTime  Float?
-  cost           Decimal? @db.Decimal(18, 8)
-  createdAt      DateTime @default(now())
-  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@index([agentId, status])
-}
-
 model AgentCapability {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   agentId     String
   name        String
   description String?
-  agent       Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent       Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([agentId])
 }
 
-model AgentTransaction {
-  id        String   @id @default(cuid())
-  agentId   String
-  txHash    String   @unique
-  chain     String
-  action    String
-  amount    Decimal? @db.Decimal(18, 8)
-  status    String
-  timestamp DateTime @default(now())
-  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@index([agentId, timestamp])
-}
-
 model AgentSession {
-  id            String             @id @default(cuid())
-  agentId       String
-  userAddress   String
-  spendingLimit Decimal?           @db.Decimal(18, 8)
-  expiresAt     DateTime
-  status        String
-  createdAt     DateTime           @default(now())
-  revokedAt     DateTime?
-  mode          String             @default("SIMULATION")
-  provider      String             @default("KYмERA_GUARD")
-  walletAddress String?
+  id                String            @id @default(cuid())
+  agentId           String
+  userAddress       String
+  spendingLimit     Decimal?          @db.Decimal(18, 8)
+  expiresAt         DateTime
+  status            String
+  createdAt         DateTime          @default(now())
+  revokedAt         DateTime?
+  mode              String            @default("GUARDED")
+  provider          String            @default("KYMERA_GUARD")
+  chainId           Int               @default(97)
+  walletAddress     String?
   providerSessionId String?
-  network       String?
-  verificationUrl String?
-  grantTxHash   String?
-  agent         Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  permissions   AgentPermission[]
-  auditLogs     AgentAuditLog[]
+  network           String?
+  verificationUrl   String?
+  grantTxHash       String?
+  agent             Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  permissions       AgentPermission[]
+  auditLogs         AgentAuditLog[]
+  executions        GuardExecution[]
 
   @@index([agentId, status])
   @@index([userAddress])
+  @@index([userAddress, status])
+}
+
+/// Canonical Guard execution ledger. Every authorization decision — approved or
+/// rejected — is written here, and approved rows are what the cumulative spending
+/// cap is computed from. This is the only execution record Kymera keeps.
+model GuardExecution {
+  id                   String       @id @default(cuid())
+  /// Null for direct user payments (hiring), which Guard authorises against the hire
+  /// record itself rather than a delegated agent session.
+  sessionId            String?
+  agentId              String
+  walletAddress        String
+  action               String
+  chainId              Int
+  toAddress            String
+  method               String
+  /// 'BNB' for native value, otherwise the lowercased ERC-20 contract address.
+  asset                String
+  /// Amount counted against the session spending cap, in whole units of `asset`.
+  amount               Decimal      @default(0) @db.Decimal(38, 18)
+  valueWei             String       @default("0")
+  decision             String
+  reason               String
+  /// AUTHORIZED | SUBMITTED | CONFIRMED | FAILED | CANCELLED | EXPIRED | REJECTED
+  status               String       @default("AUTHORIZED")
+  /// sha256 of the exact calldata Kymera approved, so a tampered signature is detectable.
+  txDataHash           String
+  txHash               String?      @unique
+  blockNumber          BigInt?
+  gasUsed              BigInt?
+  effectiveGasPrice    BigInt?
+  error                String?
+  checks               Json
+  metadata             Json?
+  /// Authorizations reserve cap headroom only until this moment; abandoned ones expire.
+  reservationExpiresAt DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  submittedAt          DateTime?
+  confirmedAt          DateTime?
+  session              AgentSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// Set when this execution is the on-chain payment for a hire.
+  hireId               String?
+  agent                Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, asset, status])
+  @@index([walletAddress, createdAt])
+  @@index([agentId, createdAt])
+  @@index([status])
+}
+
+/// Single-use nonces for SIWE-style wallet authentication. Consumed on first use so
+/// a captured signature cannot be replayed.
+model AuthNonce {
+  id         String    @id @default(cuid())
+  nonce      String    @unique
+  address    String?
+  issuedAt   DateTime  @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@index([expiresAt])
+}
+
+/// A recorded Kymera evaluation of an agent. Scores are derived from observable
+/// evidence only; when there is not enough evidence the row records that fact
+/// rather than inventing a number.
+model AgentEvaluation {
+  id                 String    @id @default(cuid())
+  agentId            String
+  score              Float?
+  sufficientEvidence Boolean   @default(false)
+  identity           Float     @default(0)
+  metadata           Float     @default(0)
+  capability         Float     @default(0)
+  reliability        Float?
+  endpointReachable  Boolean?
+  endpointCheckedAt  DateTime?
+  evidenceCount      Int       @default(0)
+  breakdown          Json
+  method             String    @default("kymera-score-v1")
+  createdAt          DateTime  @default(now())
+  agent              Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+  @@index([score])
 }
 
 model AgentPermission {
@@ -158,73 +235,29 @@ model AgentPermission {
   @@index([sessionId])
 }
 
-model AltanaWallet {
-  id          String   @id @default(cuid())
-  address     String   @unique
-  network     String
-  mode        String
-  createdAt   DateTime @default(now())
-  sessions    AltanaSession[]
-  executions  AltanaExecution[]
-}
-
-model AltanaSession {
-  id                String   @id @default(cuid())
-  walletId          String
-  agentId           String
-  allowedContracts  Json
-  allowedMethods    Json
-  spendingCap       Decimal? @db.Decimal(18, 8)
-  expiry            DateTime
-  status            String
-  simulated         Boolean  @default(true)
-  revokedAt         DateTime?
-  createdAt         DateTime @default(now())
-  wallet            AltanaWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  executions        AltanaExecution[]
-  @@index([agentId, status])
-}
-
-model AltanaExecution {
-  id              String   @id @default(cuid())
-  agentId         String
-  walletId        String
-  sessionId       String
-  action          String
-  target          String
-  value           Decimal? @db.Decimal(18, 8)
-  status          String
-  simulated       Boolean  @default(true)
-  txHash          String?
-  rejectionReason String?
-  createdAt       DateTime @default(now())
-  wallet          AltanaWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  session         AltanaSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  @@index([agentId, createdAt])
-}
-
 model AgentJob {
-  id          String   @id @default(cuid())
-  chainId     Int
-  network     String
-  client      String
-  provider    String
-  evaluator   String
-  budget      Decimal  @db.Decimal(18, 8)
-  status      String
-  simulated   Boolean  @default(true)
-  txHash            String? @unique
+  id                String    @id @default(cuid())
+  chainId           Int
+  network           String
+  client            String
+  provider          String
+  evaluator         String
+  budget            Decimal   @db.Decimal(18, 8)
+  status            String
+  simulated         Boolean   @default(true)
+  txHash            String?   @unique
   from              String?
   to                String?
-  value             Decimal? @db.Decimal(18, 8)
+  value             Decimal?  @db.Decimal(18, 8)
   submittedAt       DateTime?
   confirmedAt       DateTime?
   blockNumber       BigInt?
   gasUsed           BigInt?
   effectiveGasPrice BigInt?
   error             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
   @@index([network, status])
 }
 
@@ -252,24 +285,24 @@ model Benchmark {
 }
 
 model BenchmarkResult {
-  id            String    @id @default(cuid())
-  benchmarkId   String
-  agentId       String
-  accuracy      Float?
-  executionTime Float?
-  cost          Decimal?  @db.Decimal(18, 8)
-  riskScore     Float?
-  score         Float?
-  capabilityMatch Float?
-  taskRelevance Float?
-  protocolMatch Float?
-  metadataQuality Float?
+  id                   String    @id @default(cuid())
+  benchmarkId          String
+  agentId              String
+  accuracy             Float?
+  executionTime        Float?
+  cost                 Decimal?  @db.Decimal(18, 8)
+  riskScore            Float?
+  score                Float?
+  capabilityMatch      Float?
+  taskRelevance        Float?
+  protocolMatch        Float?
+  metadataQuality      Float?
   evaluationConfidence Float?
-  reasoning     Json?
-  result        Json?
-  rank          Int?
-  benchmark     Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
-  agent         Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  reasoning            Json?
+  result               Json?
+  rank                 Int?
+  benchmark            Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+  agent                Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@unique([benchmarkId, agentId])
   @@index([agentId])

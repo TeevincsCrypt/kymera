@@ -145,5 +145,3 @@ export async function getPancakeOpportunities(task: string) {
   const query = task.toLowerCase()
   return pools.map((pool) => ({ pool, score: Math.round((pool.apr ?? 0) * 0.55 + Math.min(100, Math.log10(Math.max(pool.tvlUsd ?? 0, 1)) * 7) * 0.3 + (pool.risk === 'Lower' ? 15 : pool.risk === 'Moderate' ? 8 : 0)), reason: pool.apr === null ? 'APR unavailable; review pool metrics before acting.' : query.includes('lower-risk') || query.includes('low risk') ? `${pool.token0.symbol}/${pool.token1.symbol} ranked with liquidity depth and risk signal.` : `${pool.token0.symbol}/${pool.token1.symbol} ranked by reported APR, TVL, and risk signal.` }))
 }
-
-export function buildUnsignedActionPreview(pool: PancakePool, action: 'add_liquidity' | 'remove_liquidity' | 'swap') { return { action, poolId: pool.id, chain: CHAIN, status: 'PREVIEW_ONLY', executable: false, reason: 'Unsigned preview only. Guard authorization and a verified wallet execution provider are required.' } }
